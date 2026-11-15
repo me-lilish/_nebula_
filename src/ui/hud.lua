@@ -96,6 +96,7 @@ function HUD.drawVitals(ls, t, autopilot)
   Theme.panel(14, 654, 126, 42, { cut = 8, edge = statusColor(ls.human.healthStatus) })
   lg.setFont(Theme.font(12)); Theme.set(C.white); lg.printf(string.format("VULCAN  %d%%", f0(ls.human.health)), 20, 667, 114, "center")
   Theme.meter(24, 685, 104, 4, ls.human.health / 100, statusColor(ls.human.healthStatus))
+  if HUD.touchMode then return end -- on phones the touch buttons take this corner
   Theme.panel(1130, 654, 136, 42, { cut = 8, edge = C.cyanMid })
   lg.setFont(Theme.font(12)); Theme.set(C.cyanLight); lg.printf("TAB tablet  M sound", 1134, 667, 128, "center")
 end
