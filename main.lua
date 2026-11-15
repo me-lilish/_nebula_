@@ -45,6 +45,8 @@ function love.load(args)
   end
   love.window.setTitle("Space Mission - Junior Astronaut Trainer")
   love.window.setMode(VW, VH, { resizable = true, minwidth = 640, minheight = 360 })
+  local ok, icon = pcall(love.image.newImageData, "assets/icon.png")
+  if ok then love.window.setIcon(icon) end
   canvas = love.graphics.newCanvas(VW, VH)
   menu = Menu.new(startGame, function() love.event.quit() end)
 end
