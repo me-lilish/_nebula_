@@ -43,6 +43,7 @@ Map.corridors = {
   { x = 621,  y = 262,  w = 228, h = 150 },  -- power <-> water
   { x = 604,  y = 1751, w = 276, h = 150 },  -- batteries <-> air
   { x = 1580, y = 1751, w = 262, h = 150 },  -- air <-> food
+  { x = 1660, y = 1096, w = 150, h = 655 },  -- main hall -> food (no locked room on the way)
   { x = 2140, y = 1260, w = 150, h = 126 },  -- comms <-> food
   { x = 2121, y = 674,  w = 150, h = 108 },  -- quarters <-> comms
   { x = 144,  y = 2034, w = 150, h = 316 },

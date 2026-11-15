@@ -132,8 +132,8 @@ Layout.PROPS = P
 
 -- Floor area a solid prop blocks (its front part, so Vulcan can pass "behind"
 -- the top of tall furniture without walking through it).
-function Layout.footprint(p)
-  local d = math.min(p.h, 46)
+function Layout.footprint(p, depth)
+  local d = math.min(p.h, depth or 46)
   return { x = p.x + 6, y = p.y + p.h - d, w = p.w - 12, h = d }
 end
 

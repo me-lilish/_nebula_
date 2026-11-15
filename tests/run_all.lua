@@ -10,6 +10,7 @@ local files = {
   "tests/test_room.lua",
   "tests/test_guide.lua",
   "tests/test_progression.lua",
+  "tests/test_walkthrough.lua",
 }
 -- Use the same Lua that is running this script.
 local i, lua = 0, nil

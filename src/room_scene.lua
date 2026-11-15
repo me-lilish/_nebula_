@@ -31,7 +31,8 @@ Room.VIEW_W, Room.VIEW_H = 1280, 720      -- full-screen playfield; details live
 Room.START_X, Room.START_Y = Map.START_X, Map.START_Y
 Room.ENTRANCE_X = Map.ENTRANCE_X
 Room.INTERACT_RANGE = 60
-Room.TIRED_SPEED = 0.6                    -- exhaustion slows Vulcan down
+Room.TIRED_SPEED = 0.6
+Room.CORNER_SLIDE = 12                    -- px Vulcan may slip round a door corner                    -- exhaustion slows Vulcan down
 Room.MESSAGE_SECONDS = 3.5
 Room.NEWS_SECONDS = 7
 
@@ -370,8 +371,12 @@ function Room.new(opts)
   self.props = Layout.PROPS
   self.solids = {}
   for _, p in ipairs(self.props) do if p.solid then self.solids[#self.solids + 1] = Layout.footprint(p) end end
+  -- machines block only their base (where they stand on the floor), like
+  -- furniture, so there are no invisible walls around the top of the art
+  for _, m in ipairs(self.machines) do self.solids[#self.solids + 1] = Layout.footprint(m, 52) end
   local E = Map.EXTERIOR
-  self.bounds = { left = E.x, top = E.y, right = Map.WIDTH, bottom = Map.HEIGHT }
+  -- walking limits: the whole station plus the lunar field (walls do the rest)
+  self.bounds = { left = E.x, top = 0, right = Map.WIDTH, bottom = Map.HEIGHT }
   self.camX, self.camY = 0, 0
   self.time = 0
   self.showTablet = false
@@ -456,6 +461,16 @@ function Room:_onUnlock(level)
   self.news, self.newsTimer = string.format("LEVEL %d UNLOCKED: %s - %s", self.mission.level, level.name, level.room), Room.NEWS_SECONDS
 end
 
+-- level tasks that finish by themselves (all shields placed, storm over)
+function Room:_checkAutoTasks()
+  local o = self.mission:objective()
+  if o and o.id == "shield" and self.ls.radiation:deployedUnits() >= self.ls.radiation.config.SHIELD_UNITS then
+    self:_completeTask("shield")
+  end
+  o = self.mission:objective()
+  if o and o.id == "survive" and self.ls.radiation.stormsSurvived > 0 then self:_completeTask("survive") end
+end
+
 function Room:_nearestMachine()
   local best, bestDist
   for _, m in ipairs(self.machines) do
@@ -520,9 +535,6 @@ function Room:_blocked(x, y)
     end
     if not self.mission:exteriorUnlocked() and Map.isOutside(x, y) then return true end
   end
-  for _, m in ipairs(self.machines) do
-    if distanceToRect(x, y, m) < r then return true end
-  end
   for _, f in ipairs(self.solids) do
     if distanceToRect(x, y, f) < r then return true end
   end
@@ -576,8 +588,10 @@ function Room:_refreshGuide()
   if self.guide.station and self:isRoomLocked((self:machineById(self.guide.station) or {}).room or "") then
     self.guide = { level = "tip", text = "Mission Control is running the locked systems for you." }
   end
+  -- the level task is shown unless something needs help urgently
+  local urgent = self.guide.level == "danger" or self.guide.level == "critical"
   local o = self.mission:objective()
-  if o and not self:isOver() and not ls:isAnyCritical() then
+  if o and not self:isOver() and not urgent then
     local station, text = o.station, o.text
     local deployed = ls.radiation:deployedUnits()
     if o.id == "shield" and ls.radiation.loadedUnits == 0 and deployed < 9 then
@@ -607,9 +621,28 @@ function Room:update(dt)
     -- Slide along walls: try the full move, then each axis on its own.
     local nx, ny = v.x, v.y
     if self:_blocked(nx, ny) then
-      if not self:_blocked(nx, oldY) then v.x, v.y = nx, oldY
-      elseif not self:_blocked(oldX, ny) then v.x, v.y = oldX, ny
-      else v.x, v.y = oldX, oldY end
+      if not self:_blocked(nx, oldY) and nx ~= oldX then v.x, v.y = nx, oldY
+      elseif not self:_blocked(oldX, ny) and ny ~= oldY then v.x, v.y = oldX, ny
+      else
+        v.x, v.y = oldX, oldY
+        -- corner help: caught on the edge of a doorway? slip sideways a little
+        local mx, my = nx - oldX, ny - oldY
+        for off = 2, Room.CORNER_SLIDE, 2 do
+          local done = false
+          for _, sgn in ipairs({ 1, -1 }) do
+            local tx, ty = oldX + mx, oldY + my
+            if mx == 0 then tx = oldX + sgn * off elseif my == 0 then ty = oldY + sgn * off end
+            if (mx == 0 or my == 0) and not self:_blocked(tx, ty) then
+              -- move only a small step sideways this frame
+              local step = math.min(off, math.abs(mx + my))
+              if mx == 0 then v.x = oldX + sgn * step else v.y = oldY + sgn * step end
+              if self:_blocked(v.x, v.y) then v.x, v.y = oldX, oldY else done = true end
+              break
+            end
+          end
+          if done then break end
+        end
+      end
     end
     -- Inside <-> outside through the outer airlock door
     local nowOut = Map.isOutside(v.x, v.y)
@@ -665,13 +698,7 @@ function Room:update(dt)
     self.unlockCard.timer = self.unlockCard.timer - dt
     if self.unlockCard.timer <= 0 then self.unlockCard = nil end
   end
-  -- level tasks that finish by themselves
-  local o = self.mission:objective()
-  if o and o.id == "shield" and self.ls.radiation:deployedUnits() >= self.ls.radiation.config.SHIELD_UNITS then
-    self:_completeTask("shield")
-  end
-  o = self.mission:objective()
-  if o and o.id == "survive" and self.ls.radiation.stormsSurvived > 0 then self:_completeTask("survive") end
+  self:_checkAutoTasks()
   self:_refreshGuide()
   if self.fx then self.fx:update(dt) end
   if self.renderer then self.renderer:update(dt, v, function(d) return self:isDoorLocked(d) end) end
@@ -700,13 +727,16 @@ function Room:mousepressed(sx, sy, button)
         self:_effect(m.fx[1], m.x + m.w / 2, m.y + m.h / 3, 16)
         self:_label(m.fx[2], m.x + m.w / 2, m.y - 10)
       end
-      self:_completeTask(m.id)
+      -- the shield task only counts once every section is covered
+      if m.id ~= "shield" then self:_completeTask(m.id) end
     else
       local text = m.problems[reason] or "That station can't help right now."
       if reason == "cooldown" then text = string.format(text, math.ceil(self.ls.co2CleanerCooldown)) end
       self:say(text)
     end
   end
+  self:_checkAutoTasks()
+  self:_refreshGuide()
   return m
 end
 
