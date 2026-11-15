@@ -159,11 +159,12 @@ test("Shift sprints; legs only move when Vulcan really moves", function()
   -- push into the quarters' left wall: no walking animation, no "moving"
   walk(r, "left", 120)
   eq(r.vulcan.moving, false); eq(r.vulcan.anim, 0)
-  -- tired astronauts cannot sprint
+  -- tired astronauts can only hurry a little, and are told why
   r.human.isFatigued = function() return true end
   r.vulcan.x = 2100
   held.lshift = true; x0 = r.vulcan.x; walk(r, "left", 10); held.lshift = false
-  T.near(x0 - r.vulcan.x, walked * Room.TIRED_SPEED, 1e-6)
+  T.near(x0 - r.vulcan.x, walked * Room.TIRED_SPEED * Vulcan.SPRINT, 1e-6)
+  assert(r.message and r.message:find("tired"), tostring(r.message))
 end)
 
 test("sandbox mode still opens everything", function()

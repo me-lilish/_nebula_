@@ -157,7 +157,7 @@ end
 -- Guide banner, or the red emergency countdown
 function HUD.drawBanner(ls, guide, t)
   local lg = love.graphics
-  local x, w = 240, 626
+  local x, w = 240, 584
   if ls:isAnyCritical() and not ls.missionFailed then
     local names = { air = "AIR", water = "WATER", power = "POWER", radiation = "RADIATION", health = "HEALTH", dust = "DUST" }
     local parts = {}
@@ -182,9 +182,19 @@ function HUD.drawBanner(ls, guide, t)
   lg.setFont(Theme.font(13)); Theme.set(col)
   lg.print(guide.level == "tip" and "NEXT TASK" or "NEEDS YOU", x + 60, 14)
   local size = 19
-  while size > 12 and Theme.font(size):getWidth(guide.text) > w - 76 do size = size - 1 end
+  local I18n = require("src.i18n")
+  while size > 12 and I18n.width(Theme.font(size), guide.text) > w - 76 do size = size - 1 end
   lg.setFont(Theme.font(size)); Theme.set(C.white)
   lg.print(guide.text, x + 60, 29 + (19 - size) * 0.5)
+end
+
+-- read-aloud button (English text-to-speech)
+function HUD.drawSpeaker(b, autoOn, t)
+  local lg = love.graphics
+  Theme.set(C.ink); lg.circle("fill", b.x, b.y, b.r + 3)
+  Theme.set(autoOn and C.cyan or C.space); lg.circle("fill", b.x, b.y, b.r)
+  Theme.set(C.cyan); lg.setLineWidth(2); lg.circle("line", b.x, b.y, b.r); lg.setLineWidth(1)
+  Icons.draw("speaker", b.x, b.y, b.r * 1.3, autoOn and C.ink or C.white)
 end
 
 function HUD.drawMinimap(machines, vulcan, cam, view, ls, guide, t)

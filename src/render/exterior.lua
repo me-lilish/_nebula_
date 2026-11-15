@@ -168,7 +168,7 @@ end
 local function tag(lg, text, x, y, locked, level)
   local f = Theme.font(13); lg.setFont(f)
   local s = locked and ("LEVEL " .. level .. " - LOCKED") or text
-  local w = f:getWidth(s) + 20
+  local w = require("src.i18n").width(f, s) + 20
   local pts = Theme.cutPoints(x - w / 2, y, w, 22, 6)
   Theme.set(C.space, 0.9); lg.polygon("fill", pts)
   Theme.set(locked and C.metalShade or C.cyan); lg.setLineWidth(2); lg.polygon("line", pts); lg.setLineWidth(1)

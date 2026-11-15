@@ -120,6 +120,17 @@ DRAW.alert = function(x, y, s, col)
   Theme.set(C.ink); lg.rectangle("fill", x - s * 0.05, y - s * 0.18, s * 0.1, s * 0.3); lg.circle("fill", x, y + s * 0.25, s * 0.06)
 end
 
+-- loudspeaker with sound waves (read aloud)
+DRAW.speaker = function(x, y, s, col)
+  local lg = love.graphics
+  local pts = { x - s * 0.42, y - s * 0.14, x - s * 0.22, y - s * 0.14, x + s * 0.04, y - s * 0.38,
+    x + s * 0.04, y + s * 0.38, x - s * 0.22, y + s * 0.14, x - s * 0.42, y + s * 0.14 }
+  Theme.set(col); lg.polygon("fill", pts); ink(3); lg.polygon("line", pts)
+  Theme.set(col); lg.setLineWidth(s * 0.08)
+  lg.arc("line", "open", x + s * 0.06, y, s * 0.2, -0.8, 0.8)
+  lg.arc("line", "open", x + s * 0.06, y, s * 0.38, -0.8, 0.8)
+end
+
 function Icons.draw(name, x, y, size, color)
   local fn = DRAW[name]
   if not fn then return end

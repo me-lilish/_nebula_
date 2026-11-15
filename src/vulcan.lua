@@ -19,6 +19,7 @@ Vulcan.RADIUS = 22        -- collision circle around the feet
 Vulcan.HEIGHT = 96        -- drawn sprite height
 Vulcan.FRAME_TIME = 0.14  -- seconds per walk frame (at walking speed)
 Vulcan.SPRINT = 1.7       -- Shift: sprint speed multiplier
+Vulcan.STILL_GRACE = 0.12 -- s of "no progress" before the legs stop (no flicker on walls)
 
 function Vulcan.new(x, y)
   return setmetatable({ x = x, y = y, radius = Vulcan.RADIUS, facing = -1, moving = false, anim = 0 }, Vulcan)
@@ -38,9 +39,10 @@ function Vulcan:update(dt, isDown, bounds, speedMul)
 
   self.wantsToMove = dx ~= 0 or dy ~= 0
   if dx < 0 then self.facing = -1 elseif dx > 0 then self.facing = 1 end
-  local tired = (speedMul or 1) < 1
-  self.sprinting = self.wantsToMove and not tired and (isDown("lshift") or isDown("rshift"))
+  -- a tired astronaut can still hurry, just not as fast (speedMul < 1)
+  self.sprinting = self.wantsToMove and (isDown("lshift") or isDown("rshift"))
   self.prevX, self.prevY = self.x, self.y
+  self.lastDt = dt
 
   local speed = Vulcan.SPEED * (speedMul or 1) * (self.sprinting and Vulcan.SPRINT or 1)
   self.x = self.x + dx * speed * dt
@@ -50,17 +52,20 @@ function Vulcan:update(dt, isDown, bounds, speedMul)
     self.x = math.max(bounds.left + r, math.min(bounds.right - r, self.x))
     self.y = math.max(bounds.top + r, math.min(bounds.bottom - r, self.y))
   end
-  self:stepAnimation()
 end
 
 -- Call again after the caller moved Vulcan back from a wall: the legs only
--- move as far as the body really travelled.
+-- move as far as the body really travelled. A short grace period keeps the
+-- walk pose while sliding along a wall (moving on one frame, not the next),
+-- so the legs never flicker between standing and walking.
 function Vulcan:stepAnimation()
   local d = math.sqrt((self.x - (self.prevX or self.x)) ^ 2 + (self.y - (self.prevY or self.y)) ^ 2)
-  self.moving = d > 0.01
-  if self.moving then
+  local really = d > 0.01
+  if really then self.stillTime = 0 else self.stillTime = (self.stillTime or 0) + (self.lastDt or 0) end
+  self.moving = really or (self.wantsToMove and self.stillTime < Vulcan.STILL_GRACE) or false
+  if really then
     self.anim = (self.baseAnim or self.anim) + d / Vulcan.SPEED
-  else
+  elseif not self.moving then
     self.anim = 0
   end
   self.baseAnim = nil

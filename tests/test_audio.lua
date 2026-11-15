@@ -99,4 +99,18 @@ test("menu buttons tick on hover and click when pressed", function()
   eq(quit, false, "waits for the click to be heard"); m:update(0.25, -1, -1); eq(quit, true)
 end)
 
+test("no footstep is lost when a slow frame skips walk frames", function()
+  local ft = require("src.vulcan").FRAME_TIME
+  -- one big jump over two contacts still counts them
+  eq(Audio.contactsBetween(0.01, 0.01 + 4 * ft, ft), 2)
+  eq(Audio.contactsBetween(0.30, 0.31, ft), 0)
+  -- summed over many tiny or large steps the total is the same
+  local function total(step)
+    local n, a = 0, 0
+    while a < 3 do n = n + Audio.contactsBetween(a, a + step, ft); a = a + step end
+    return n
+  end
+  eq(total(0.005), total(0.09))
+end)
+
 T.finish()

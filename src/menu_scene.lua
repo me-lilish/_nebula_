@@ -35,6 +35,13 @@ function Menu.new(onStart, onQuit)
     { id = "start", cx = W / 2, cy = 470, w = 420, n = self.startN, h = self.startH },
     { id = "abort", cx = W / 2, cy = 570, w = 420, n = self.abortN, h = self.abortH },
   }
+  -- language + read-aloud toggles (main menu) and the briefing speaker button.
+  -- main.lua sets onLanguage / onTTS / onSpeak and valueOf(id) -> text.
+  self.toggles = {
+    { id = "lang", label = "LANGUAGE: %s", x = 296, y = 640, w = 330, h = 44 },
+    { id = "tts", label = "READ ALOUD: %s", x = 654, y = 640, w = 330, h = 44 },
+  }
+  self.speaker = { x = 1040, y = 120, r = 30 }
   -- stars, kept away from the title and the buttons
   local rng = love.math.newRandomGenerator(42)
   self.stars = {}
@@ -51,6 +58,16 @@ function Menu.new(onStart, onQuit)
   end
   return self
 end
+
+Menu.INTRO = "Welcome to the Moon base, Vulcan! Keep the habitat alive: every machine is connected, just like on a real space station."
+Menu.STEPS = {
+  { "health", { 1, 0.3, 0.37, 1 }, "Start in the Crew Quarters: eat, use the bathroom and sleep." },
+  { "clean", { 0.66, 0.96, 1, 1 }, "Each level opens a new room and a new system to look after." },
+  { "air", { 0.56, 0.89, 1, 1 }, "Every machine has a mini-game: win it to make the machine work." },
+  { "water", { 0.25, 0.66, 1, 1 }, "Locked rooms are run by Mission Control until you reach them." },
+  { "power", { 1, 0.82, 0.25, 1 }, "Watch air, water and battery at the top of the screen." },
+  { "radiation", { 1, 0.85, 0.3, 1 }, "At Level 8 a solar storm comes: pile Moon soil as shields!" },
+}
 
 local function buttonRect(b)
   local img = b.n
@@ -72,6 +89,8 @@ function Menu:_sound(name) if self.sound then self.sound(name) end end
 
 function Menu:update(dt, mx, my)
   self.t = self.t + dt
+  local tg = self.state == "menu" and self:toggleAt(mx or -1, my or -1)
+  self.hoverToggle = tg and tg.id or nil
   local hover = (self.state == "menu") and self:hit(mx or -1, my or -1) or nil
   if hover and hover ~= self.hover then self:_sound("sfx_hover") end
   self.hover = hover
@@ -90,8 +109,40 @@ function Menu:update(dt, mx, my)
   end
 end
 
+function Menu:toggleAt(x, y)
+  for _, b in ipairs(self.toggles or {}) do
+    if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then return b end
+  end
+end
+
+function Menu:onSpeaker(x, y)
+  local sp = self.speaker
+  return (x - sp.x) ^ 2 + (y - sp.y) ^ 2 <= sp.r * sp.r
+end
+
+-- English text of the briefing (read aloud by the speaker button)
+function Menu:briefingText()
+  local parts = { Menu.INTRO }
+  for _, st in ipairs(Menu.STEPS) do parts[#parts + 1] = st[3] end
+  return table.concat(parts, " ")
+end
+
 function Menu:mousepressed(x, y, button)
   if button ~= 1 then return end
+  if self.state == "briefing" and self:onSpeaker(x, y) then
+    self:_sound("sfx_click")
+    if self.onSpeak then self.onSpeak(self:briefingText()) end
+    return
+  end
+  if self.state == "menu" then
+    local tg = self:toggleAt(x, y)
+    if tg then
+      self:_sound("sfx_click")
+      if tg.id == "lang" and self.onLanguage then self.onLanguage() end
+      if tg.id == "tts" and self.onTTS then self.onTTS() end
+      return
+    end
+  end
   if self.state == "briefing" then
     self:_sound("sfx_click")
     if self.onStart then self.onStart() end
@@ -167,8 +218,17 @@ function Menu:draw()
         lg.draw(img, x, y + bob, 0, w / img:getWidth(), w / img:getWidth())
       end
     end
-    lg.setFont(Theme.font(14)); Theme.set(C.cyanLight, 0.6)
-    lg.printf("NASA Space Apps Challenge 2026", 0, H - 30, W, "center")
+    for _, b in ipairs(self.toggles or {}) do
+      local hot = self.hoverToggle == b.id
+      local pts = Theme.cutPoints(b.x, b.y, b.w, b.h, 10)
+      Theme.set(hot and C.cyanMid or C.space, 0.92); lg.polygon("fill", pts)
+      Theme.set(C.cyan); lg.setLineWidth(2); lg.polygon("line", pts); lg.setLineWidth(1)
+      local v = self.valueOf and self.valueOf(b.id) or ""
+      lg.setFont(Theme.font(17)); Theme.set(C.white)
+      lg.printf(string.format(b.label, v), b.x, b.y + 11, b.w, "center")
+    end
+    lg.setFont(Theme.font(13)); Theme.set(C.cyanLight, 0.6)
+    lg.printf("NASA Space Apps Challenge 2026", 0, H - 22, W, "center")
   else
     self:_drawBriefing()
   end
@@ -181,18 +241,12 @@ function Menu:_drawBriefing()
   Theme.panel(x, y, w, h, { cut = 24, fill = C.space, alpha = 0.96, lineWidth = 3 })
   Theme.outlinedText("MISSION BRIEFING", x, y + 22, w, "center", C.cyan, C.ink, Theme.font(34))
   lg.setFont(Theme.font(18)); Theme.set(C.white)
-  lg.printf("Welcome to the Moon base, Vulcan! You just came back from a moonwalk. "
-    .. "Keep the habitat alive: every machine is connected, just like on a real space station.",
-    x + 60, y + 78, w - 120, "center")
-  local steps = {
-    { "clean", C.cyanLight, "Clean your dusty suit at the Suit Dust-Off before you go inside." },
-    { "air", C.oxygen, "Make oxygen and clean the CO2 so the crew can breathe." },
-    { "water", C.water, "Recycle used water into clean drinking water." },
-    { "power", C.power, "Aim the solar panels so the batteries stay charged." },
-    { "food", C.food, "Grow, harvest and eat food. Sleep and use the toilet too!" },
-    { "radiation", C.caution, "When a solar storm warning comes, pile Moon soil as shields." },
-  }
-  for i, s in ipairs(steps) do
+  lg.printf(Menu.INTRO, x + 60, y + 78, w - 120, "center")
+  -- speaker: read the briefing aloud (English)
+  local sp = self.speaker
+  Theme.circle(sp.x, sp.y, sp.r, C.cyanMid, 3)
+  Icons.draw("speaker", sp.x, sp.y, 32, C.white)
+  for i, s in ipairs(Menu.STEPS) do
     local col = (i - 1) % 2
     local row = math.floor((i - 1) / 2)
     local bx, by = x + 50 + col * 410, y + 170 + row * 82

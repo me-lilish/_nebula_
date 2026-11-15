@@ -180,7 +180,7 @@ local function drawSign(lg, r)
   local p = SIGN_AT[r.id] or { r.x + 30, r.y + 12 }
   local font = Theme.font(p[3] or 16)
   lg.setFont(font)
-  local tw = font:getWidth(r.name) + 26
+  local tw = require("src.i18n").width(font, r.name) + 26
   local sx, sy = p[1], p[2]
   local pts = Theme.cutPoints(sx, sy, tw, 28, 9)
   Theme.set(C.space, 0.95); lg.polygon("fill", pts)

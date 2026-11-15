@@ -5,18 +5,25 @@
 --
 -- The game draws to a fixed 1280 x 720 virtual screen that is scaled to fit
 -- any window size (the window is resizable).
+-- In the game: Esc or P = pause menu (language, read aloud, sound, restart).
 
 local RoomScene = require("src.room_scene")
 local DebugScene = require("src.debug_scene")
 local Menu = require("src.menu_scene")
 local Audio = require("src.audio")
 local Touch = require("src.ui.touch")
+local I18n = require("src.i18n")
+local TTS = require("src.tts")
+local Settings = require("src.settings")
+local PauseMenu = require("src.pause_menu")
 
 local VW, VH = 1280, 720
 local canvas
 local scene, menu, room, audio
 local touch = Touch.new()
 local mode = "menu" -- "menu" | "game" | "debug"
+local paused = false
+local pause
 
 local function viewTransform()
   local ww, wh = love.graphics.getDimensions()
@@ -31,9 +38,51 @@ end
 
 local function startGame()
   room = room or RoomScene.new({ campaign = true, puzzles = true,
-    isDown = function(k) return love.keyboard.isDown(k) or touch:isDown(k) end })
+    isDown = function(k) return not paused and (love.keyboard.isDown(k) or touch:isDown(k)) end })
   room:reset()
   mode = "game"
+  paused = false
+end
+
+------------------------------------------------------------------------------
+-- Settings shared by the main menu and the pause menu
+------------------------------------------------------------------------------
+local function setLanguage(lang)
+  I18n.setLanguage(lang)
+  Settings.lang = lang
+  Settings.save()
+  -- room signs are painted once into the station canvas: repaint them
+  if room and room.renderer then room.renderer:build() end
+end
+
+local function nextLanguage()
+  setLanguage(I18n.lang == "en" and "ar" or "en")
+end
+
+local function toggleReadAloud()
+  TTS.setEnabled(not TTS.enabled)
+  Settings.tts = TTS.enabled
+  Settings.save()
+  if TTS.enabled then TTS.speak("Read aloud is on.") end
+end
+
+local function toggleSound()
+  Settings.mute = audio:toggleMute()
+  Settings.save()
+end
+
+local function settingValue(id)
+  if id == "lang" or id == "language" then return I18n.NAMES[I18n.lang] end
+  if id == "tts" then return TTS.enabled and "ON" or "OFF" end
+  if id == "sound" then return audio.muted and "OFF" or "ON" end
+  return ""
+end
+
+local function openPause()
+  paused = true
+  touch.stick = nil
+  pause.selected = 1
+  audio:play("sfx_click")
 end
 
 function love.load(args)
@@ -62,6 +111,29 @@ function love.load(args)
   menu = Menu.new(startGame, function() if not onWeb then love.event.quit() end end)
   audio = Audio.new()
   menu.sound = function(name) audio:play(name) end
+
+  -- languages, read aloud, settings, pause menu
+  I18n.install()
+  Settings.load()
+  setLanguage(Settings.lang)
+  TTS.setEnabled(Settings.tts)
+  if Settings.mute and not audio.muted then audio:toggleMute() end
+  menu.onLanguage, menu.onTTS = nextLanguage, toggleReadAloud
+  menu.onSpeak = function(text) TTS.speak(text) end
+  menu.valueOf = settingValue
+  pause = PauseMenu.new({
+    resume = function() paused = false end,
+    language = nextLanguage,
+    tts = toggleReadAloud,
+    sound = toggleSound,
+    restart = function() room:reset(); paused = false end,
+    menu = function() paused = false; menu.state = "menu"; mode = "menu" end,
+    value = settingValue,
+  })
+end
+
+function love.quit()
+  TTS.shutdown()
 end
 
 function love.update(dt)
@@ -69,6 +141,9 @@ function love.update(dt)
   if mode == "debug" then scene:update(dt) return end
   if mode == "menu" then
     menu:update(dt, toVirtual(love.mouse.getPosition()))
+    audio:updateMusic(dt, "ambient")
+    audio:silenceWorld(dt)
+  elseif paused then
     audio:updateMusic(dt, "ambient")
     audio:silenceWorld(dt)
   else
@@ -81,7 +156,11 @@ function love.draw()
   if mode == "debug" then scene:draw() return end
   love.graphics.setCanvas({ canvas, stencil = true })
   love.graphics.clear(0, 0, 0, 1)
-  if mode == "menu" then menu:draw() else room:draw(); touch:draw(room.puzzles:isOpen()) end
+  if mode == "menu" then menu:draw()
+  else
+    room:draw()
+    if paused then pause:draw(love.timer.getTime()) else touch:draw(room.puzzles:isOpen()) end
+  end
   love.graphics.setCanvas()
   love.graphics.clear(0.03, 0.03, 0.08)
   local s, ox, oy = viewTransform()
@@ -91,14 +170,13 @@ end
 
 function love.keypressed(key)
   if mode == "debug" then scene:keypressed(key) return end
-  if key == "m" then audio:toggleMute() return end
+  if key == "m" then toggleSound() return end
   if mode == "menu" then
     menu:keypressed(key)
-  elseif key == "escape" and not room.puzzles:isOpen() then
-    audio:play("sfx_click")
-    menu.state = "menu"
-    mode = "menu"
-    touch.stick = nil
+  elseif paused then
+    if pause:keypressed(key) then audio:play("sfx_click") end
+  elseif (key == "escape" or key == "p") and not room.puzzles:isOpen() then
+    openPause()
   else
     room:keypressed(key)
   end
@@ -115,13 +193,16 @@ end
 function love.mousemoved(x, y, dx, dy, istouch)
   if mode ~= "game" or istouch then return end
   local vx, vy = toVirtual(x, y)
+  if paused then pause:mousemoved(vx, vy) return end
   room:mousemoved(vx, vy)
 end
 
 function love.mousepressed(x, y, button, istouch)
   if mode == "debug" or istouch then return end
   local vx, vy = toVirtual(x, y)
-  if mode == "menu" then menu:mousepressed(vx, vy, button) else room:mousepressed(vx, vy, button) end
+  if mode == "menu" then menu:mousepressed(vx, vy, button)
+  elseif paused then if pause:mousepressed(vx, vy) then audio:play("sfx_click") end
+  else room:mousepressed(vx, vy, button) end
 end
 
 ------------------------------------------------------------------------------
@@ -135,6 +216,7 @@ function love.touchpressed(id, x, y)
   require("src.ui.hud").touchMode = true
   local vx, vy = toVirtual(x, y)
   if mode == "menu" then menu:mousepressed(vx, vy, 1) return end
+  if paused then if pause:mousepressed(vx, vy) then audio:play("sfx_click") end return end
   if room.puzzles:isOpen() then
     if Touch.hit(Touch.CLOSE, vx, vy) then room:keypressed("escape") return end
     puzzleTouch = id
@@ -145,12 +227,12 @@ function love.touchpressed(id, x, y)
   local action = touch:press(id, vx, vy)
   if action == "use" then room:keypressed("e")
   elseif action == "tab" then room:keypressed("tab")
-  elseif action == "menu" then love.keypressed("escape")
+  elseif action == "menu" then openPause()
   elseif action == nil then room:mousepressed(vx, vy, 1) end
 end
 
 function love.touchmoved(id, x, y)
-  if mode ~= "game" then return end
+  if mode ~= "game" or paused then return end
   local vx, vy = toVirtual(x, y)
   if puzzleTouch == id then room:mousemoved(vx, vy) else touch:move(id, vx, vy) end
 end

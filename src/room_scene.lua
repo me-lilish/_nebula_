@@ -23,6 +23,8 @@ local Map = require("src.station_map")
 local Guide = require("src.guide")
 local Mission = require("src.mission_state")
 local PuzzleManager = require("src.puzzles.manager")
+local TTS = require("src.tts")
+local I18n = require("src.i18n")
 
 local Room = {}
 Room.__index = Room
@@ -35,6 +37,7 @@ Room.INTERACT_RANGE = 60
 Room.TIRED_SPEED = 0.6
 Room.CORNER_SLIDE = 12                    -- px Vulcan may slip round a door corner                    -- exhaustion slows Vulcan down
 Room.MESSAGE_SECONDS = 3.5
+Room.SPEAKER = { x = 852, y = 33, r = 22 } -- read-aloud button beside the task banner
 Room.NEWS_SECONDS = 7
 
 Room.TEXT = {
@@ -495,6 +498,7 @@ function Room:_onUnlock(level)
   end
   ls:_afterAction()
   self.unlockCard = { level = level, index = self.mission.level, timer = 6 }
+  TTS.auto(string.format("Level %d unlocked: %s. %s", self.mission.level, level.name, level.lesson), true)
   self:_sound("sfx_unlock")
   self.news, self.newsTimer = string.format("LEVEL %d UNLOCKED: %s - %s", self.mission.level, level.name, level.room), Room.NEWS_SECONDS
 end
@@ -612,7 +616,16 @@ function Room:_sound(name)
   if #self.sounds < 8 then self.sounds[#self.sounds + 1] = name end
 end
 
+-- What the speaker button reads: the current task, then the last message
+function Room:readAloudText()
+  local parts = {}
+  if self.guide and self.guide.text then parts[#parts + 1] = self.guide.text end
+  if self.message then parts[#parts + 1] = self.message end
+  return table.concat(parts, ". ")
+end
+
 function Room:say(text)
+  TTS.auto(text)
   self.message, self.messageTimer = text, Room.MESSAGE_SECONDS
 end
 
@@ -641,6 +654,11 @@ function Room:_refreshGuide()
       station, text = "regolith", string.format("Load more regolith (%d/9 shields placed).", deployed)
     end
     self.guide = { level = "tip", station = station, text = text, levelIndex = o.level }
+  end
+  -- read a new task aloud once it appears (after the current sentence)
+  if self.guide.text ~= self.lastGuideText then
+    self.lastGuideText = self.guide.text
+    if self.guide.station or self.guide.level ~= "tip" then TTS.auto(self.guide.text, true) end
   end
   local g = self.guide
   if g.station == "entrance" then
@@ -697,6 +715,11 @@ function Room:update(dt)
     end
     v.prevX, v.prevY, v.baseAnim = oldX, oldY, animBefore
     v:stepAnimation()
+    -- tell the child why running is slow when Vulcan is tired
+    if v.sprinting and self.human:isFatigued() and (self.tiredHintAt or -99) < self.time - 8 then
+      self.tiredHintAt = self.time
+      self:say("Vulcan is tired and can't run fast. Sleep in your bunk bed!")
+    end
     -- Inside <-> outside through the outer airlock door
     local nowOut = Map.isOutside(v.x, v.y)
     if nowOut ~= self.outside then
@@ -816,6 +839,8 @@ end
 -- Opens the station's mini-game; winning it runs the station
 function Room:_startPuzzle(m)
   self:_sound("sfx_click")
+  local cls = PuzzleManager.REGISTRY[m.puzzle]
+  if cls then TTS.auto(cls.title .. ". " .. (cls.hint or "")) end
   self.puzzles:start(m.puzzle, self:_puzzleOptions(m), function(won, p, cancelled)
     if won then
       self:_runStation(m, true)
@@ -835,6 +860,12 @@ function Room:mousepressed(sx, sy, button)
     return nil
   end
   if button ~= 1 then return nil end
+  local sp = Room.SPEAKER
+  if (sx - sp.x) ^ 2 + (sy - sp.y) ^ 2 <= sp.r * sp.r then
+    self:_sound("sfx_click")
+    TTS.speak(self:readAloudText())
+    return nil
+  end
   if self.unlockCard and self.unlockCard.timer < 5.2 then self.unlockCard = nil; self:_sound("sfx_click") end
   self:_updateCamera()
   local m = self:machineAt(self:screenToWorld(sx, sy))
@@ -929,7 +960,7 @@ function Room:_drawPlate(m)
   elseif near then line = "Click or press E!" ; lineColor = C.caution end
   local f1, f2 = T.font(15), T.font(12)
   local info = near and self:_t(m.info(self.ls)) or nil
-  local pw = math.max(140, f1:getWidth(title) + 26, info and (f2:getWidth(info) + 26) or 0)
+  local pw = math.max(140, I18n.width(f1, title) + 26, info and (I18n.width(f2, info) + 26) or 0)
   local ph = near and 56 or 40
   local px, py = m.x + m.w / 2 - pw / 2, m.y + m.h + 12
   local v = self.vulcan
@@ -950,8 +981,14 @@ function Room:_drawBubble()
   local v = self.vulcan
   local f = T.font(15)
   local text = self:_t(self.message)
-  local w = math.min(340, f:getWidth(text) + 28)
-  local _, lines = f:getWrap(text, w - 24)
+  local w = math.min(340, I18n.width(f, text) + 28)
+  local lines
+  if I18n.lang ~= "en" then
+    local af = self.Theme.arabicFontFor(f) or f
+    lines = I18n.wrap(af, I18n.t(text), w - 24)
+  else
+    lines = select(2, f:getWrap(text, w - 24))
+  end
   local h = #lines * f:getHeight() + 18
   local x, y = v.x - w / 2, v.y - 96 - h - 14
   local a = math.min(1, self.messageTimer * 3)
@@ -1123,6 +1160,7 @@ function Room:draw()
   self.HUD.drawClock(ls, self.outside)
   if self.campaign then self.HUD.drawLevel(self.mission, t) end
   self.HUD.drawBanner(ls, self.guide, t)
+  self.HUD.drawSpeaker(Room.SPEAKER, TTS.enabled, t)
   if self.showTablet then self.HUD.drawCards(ls, t) end
   self.HUD.drawNews(self.news and self:_t(self.news))
   if self.unlockCard then self.HUD.drawUnlock(self.unlockCard, t) end

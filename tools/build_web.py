@@ -118,6 +118,18 @@ LOADING = """function drawLoadingText(text) {
 """
 
 
+SPEECH = """printErr: console.error.bind(console),
+        print: function (text) {
+          var q = text.indexOf("@@TTSQ@@") === 0, n = text.indexOf("@@TTS@@") === 0;
+          if ((q || n) && window.speechSynthesis) {
+            var u = new SpeechSynthesisUtterance(text.slice(q ? 8 : 7));
+            u.lang = "en-US"; u.rate = 0.95;
+            if (n) window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+          } else { console.log(text); }
+        },"""
+
+
 def restyle(path):
     s = open(path, encoding="utf-8").read()
     s = s.replace('<link rel="stylesheet" type="text/css" href="theme/love.css">', STYLE)
@@ -128,6 +140,8 @@ def restyle(path):
     b = s.index("window.onload")
     s = s[:a] + LOADING + "\n      " + s[b:]
     s = s.replace("<script type='text/javascript'>", "<script type='text/javascript'>" + FIT, 1)
+    # read-aloud: the game prints "@@TTS@@text" (or "@@TTSQ@@" = queue it)
+    s = s.replace("printErr: console.error.bind(console),", SPEECH, 1)
     # start the game only after a tap (unlocks audio on phones), go fullscreen
     s = s.replace("""      var applicationLoad = function(e) {
         Love(Module);

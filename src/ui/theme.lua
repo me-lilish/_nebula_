@@ -64,6 +64,8 @@ local function loadFontData()
   return fontData
 end
 
+local fontSize = setmetatable({}, { __mode = "k" }) -- font object -> size
+
 function Theme.font(size)
   if fontCache[size] then return fontCache[size] end
   local data = loadFontData()
@@ -71,7 +73,37 @@ function Theme.font(size)
   if data then ok, f = pcall(love.graphics.newFont, data, size) end
   if not ok or not f then f = love.graphics.newFont(size) end
   fontCache[size] = f
+  fontSize[f] = size
   return f
+end
+
+-- Arabic text uses DejaVu Sans (assets/fonts, free licence, has every
+-- joined Arabic letter form), at the size of the English font it replaces.
+local arabicCache, arabicData = {}, nil
+local function loadArabicData()
+  if arabicData ~= nil then return arabicData end
+  arabicData = false
+  local path = "assets/fonts/DejaVuSans-Bold.ttf"
+  local ok, d = pcall(love.filesystem.newFileData, path)
+  if ok and d then arabicData = d; return d end
+  local f = io.open(path, "rb")
+  if f then
+    local bytes = f:read("*a"); f:close()
+    local ok2, d2 = pcall(love.filesystem.newFileData, bytes, "arabic.ttf")
+    if ok2 then arabicData = d2 end
+  end
+  return arabicData
+end
+
+function Theme.arabicFontFor(font)
+  local size = (font and fontSize[font]) or 14
+  if arabicCache[size] == nil then
+    local data = loadArabicData()
+    local ok, f = false, nil
+    if data then ok, f = pcall(love.graphics.newFont, data, math.max(8, math.floor(size * 0.86 + 0.5))) end
+    arabicCache[size] = (ok and f) or false
+  end
+  return arabicCache[size] or nil
 end
 
 ------------------------------------------------------------------------------

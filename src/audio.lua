@@ -40,6 +40,12 @@ Audio.MUSIC = { ambient = "music_ambient", tension = "music_tension", crisis = "
 function Audio.stepPhase(anim, frameTime)
   return math.floor(anim / frameTime) % 4
 end
+-- How many boot contacts happened while the animation went from a0 to a1?
+-- (counts every one, even if a slow frame jumped over several walk frames)
+function Audio.contactsBetween(a0, a1, frameTime)
+  if a1 < a0 then return 0 end
+  return math.floor(a1 / frameTime / 2) - math.floor(a0 / frameTime / 2)
+end
 function Audio.isFootContact(phase) return phase == 0 or phase == 2 end
 
 local function isBad(status) return status == "danger" or status == "critical" end
@@ -238,14 +244,15 @@ function Audio:update(dt, room)
   local v = room.vulcan
   local moved = self.lastX and ((v.x - self.lastX) ^ 2 + (v.y - self.lastY) ^ 2) > 0.04
   if v.moving and moved then
-    local phase = Audio.stepPhase(v.anim, require("src.vulcan").FRAME_TIME)
-    if phase ~= self.lastPhase and Audio.isFootContact(phase) then
+    local ft = require("src.vulcan").FRAME_TIME
+    local steps = self.lastAnim and Audio.contactsBetween(self.lastAnim, v.anim, ft) or 1
+    if steps > 0 then
       local surface = Audio.surfaceAt(v.x, v.y)
       self:play("step_" .. surface .. love.math.random(1, 3), Audio.STEP_VOLUME[surface], 0.94 + love.math.random() * 0.12)
     end
-    self.lastPhase = phase
-  else
-    self.lastPhase = nil -- the first step sounds as soon as Vulcan starts walking
+    self.lastAnim = v.anim
+  elseif not v.moving then
+    self.lastAnim = nil -- the first step sounds as soon as Vulcan starts walking
   end
   self.lastX, self.lastY = v.x, v.y
   -- UI / event sounds queued by the room
