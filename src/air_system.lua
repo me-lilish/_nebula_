@@ -1,17 +1,15 @@
 --[[
-  Habitat Air System - game logic
-  ===============================
-  Pure Lua: no love.* calls, no input, no drawing. This keeps it reusable in
-  any scene and testable with plain `lua`.
+  Cabin Air (O2 / CO2) subsystem
+  ==============================
+  Pure Lua: no love.* calls, no input, no drawing.
 
-  Usage:
-    local AirSystem = require("src.air_system")
-    local air = AirSystem.new()          -- or AirSystem.new(customConfig)
-    air:update(dt)                       -- every frame
-    air:useOxygenGenerator()             -- returns ok, reason
-    air:useScrubber()                    -- returns ok, reason
-    air:setFarmWater(true) / air:setFarmLight(true)
-    air:getFeedback()                    -- colour + child-friendly message
+  Owns ONLY the cabin gases: oxygen %, carbon dioxide %, their status and the
+  air-quality score. It does not own power, water, machines or the emergency
+  timer - src/life_support.lua coordinates those and calls:
+    air:update(dt)          crew breathing (O2 down, CO2 up)
+    air:addOxygen(pct)      from the Oxygen Maker
+    air:removeCO2(pct)      from the CO2 Cleaner (returns the amount removed)
+    air:getFeedback(timeLeft)
 ]]
 
 local defaultConfig = require("src.air_config")
@@ -27,6 +25,7 @@ AirSystem.STATUS = {
 }
 local S = AirSystem.STATUS
 local SEVERITY = { good = 1, caution = 2, danger = 3, critical = 4 }
+AirSystem.SEVERITY = SEVERITY
 
 local function clamp(v, lo, hi)
   if v < lo then return lo end
@@ -35,7 +34,7 @@ local function clamp(v, lo, hi)
 end
 
 ------------------------------------------------------------------------------
--- Pure classification helpers (exposed for tests and other systems)
+-- Pure classification helpers
 ------------------------------------------------------------------------------
 
 function AirSystem.classifyO2(o2, c)
@@ -45,7 +44,7 @@ function AirSystem.classifyO2(o2, c)
   if o2 < c.O2_GOOD_MIN then return S.CAUTION end
   if o2 <= c.O2_GOOD_MAX then return S.GOOD end
   if o2 <= c.O2_CAUTION_HIGH_MAX then return S.CAUTION end
-  return S.DANGER -- too much oxygen (fire risk); never critical. See config.
+  return S.DANGER -- too much oxygen (fire risk); never critical
 end
 
 function AirSystem.classifyCO2(co2, c)
@@ -72,12 +71,11 @@ function AirSystem.computeQuality(o2, co2, c)
 end
 
 ------------------------------------------------------------------------------
--- Construction
+-- State
 ------------------------------------------------------------------------------
 
 function AirSystem.new(config)
-  local c = config or defaultConfig
-  local self = setmetatable({ config = c }, AirSystem)
+  local self = setmetatable({ config = config or defaultConfig }, AirSystem)
   self:reset()
   return self
 end
@@ -86,24 +84,10 @@ function AirSystem:reset()
   local c = self.config
   self.oxygenPercent = c.START_O2_PERCENT
   self.carbonDioxidePercent = c.START_CO2_PERCENT
-  self.power = c.POWER_START
-
-  self.oxygenCanisters = c.O2_GEN_START_CANISTERS
-  self.scrubberFilterUses = c.SCRUBBER_FILTER_USES
-  self.scrubberCooldown = 0
-
-  self.farmHasWater = false
-  self.farmLightOn = false
-  self.farmActive = false
-
-  self.criticalTimer = 0
-  self.missionFailed = false
-  self.failureCause = nil -- "low_oxygen" | "high_co2" | "both"
-
   self:_refresh()
 end
 
--- Recompute derived values (status, quality) from the gas levels.
+-- Clamp gases and recompute status and score.
 function AirSystem:_refresh()
   local c = self.config
   self.oxygenPercent = clamp(self.oxygenPercent, c.O2_MIN_PERCENT, c.O2_MAX_PERCENT)
@@ -114,110 +98,47 @@ function AirSystem:_refresh()
   self.airQuality = AirSystem.computeQuality(self.oxygenPercent, self.carbonDioxidePercent, c)
 end
 
-------------------------------------------------------------------------------
--- Simulation step
-------------------------------------------------------------------------------
-
+-- Crew breathing.
 function AirSystem:update(dt)
-  if self.missionFailed or dt <= 0 then return end
+  if dt <= 0 then return end
   local c = self.config
-
-  -- Astronaut breathing
   self.oxygenPercent = self.oxygenPercent - c.ASTRONAUT_O2_USE_PER_SEC * dt
   self.carbonDioxidePercent = self.carbonDioxidePercent + c.ASTRONAUT_CO2_MAKE_PER_SEC * dt
-
-  -- Power recharge
-  self.power = math.min(c.POWER_MAX, self.power + c.POWER_RECHARGE_PER_SEC * dt)
-
-  -- Farm: works only with power, water AND grow light
-  local farmPowerNeeded = c.FARM_POWER_USE_PER_SEC * dt
-  self.farmActive = self.farmHasWater and self.farmLightOn and self.power >= farmPowerNeeded
-  if self.farmActive then
-    self.power = self.power - farmPowerNeeded
-    self.oxygenPercent = self.oxygenPercent + c.FARM_O2_MAKE_PER_SEC * dt
-    self.carbonDioxidePercent = self.carbonDioxidePercent - c.FARM_CO2_REMOVE_PER_SEC * dt
-  end
-
-  -- Scrubber cooldown
-  -- (tiny epsilon: summing many frame dt values leaves float dust like 1e-15)
-  self.scrubberCooldown = self.scrubberCooldown - dt
-  if self.scrubberCooldown < 1e-9 then self.scrubberCooldown = 0 end
-
   self:_refresh()
-
-  -- Critical timer: counts while critical, resets to 0 the moment it is not.
-  if self.airStatus == S.CRITICAL then
-    self.criticalTimer = self.criticalTimer + dt
-    if self.criticalTimer >= c.CRITICAL_TIME_LIMIT - 1e-9 then -- float-dust tolerance
-      self.criticalTimer = c.CRITICAL_TIME_LIMIT
-      self:_fail()
-    end
-  else
-    self.criticalTimer = 0
-  end
 end
 
-function AirSystem:_fail()
-  self.missionFailed = true
+-- Returns the oxygen actually added (after clamping).
+function AirSystem:addOxygen(percent)
+  local before = self.oxygenPercent
+  self.oxygenPercent = self.oxygenPercent + percent
+  self:_refresh()
+  return self.oxygenPercent - before
+end
+
+-- Returns the CO2 actually removed (never more than is in the cabin).
+function AirSystem:removeCO2(percent)
+  local before = self.carbonDioxidePercent
+  self.carbonDioxidePercent = self.carbonDioxidePercent - percent
+  self:_refresh()
+  return before - self.carbonDioxidePercent
+end
+
+function AirSystem:isCritical()
+  return self.airStatus == S.CRITICAL
+end
+
+-- "low_oxygen" | "high_co2" | "both" | nil
+function AirSystem:criticalCause()
   local lowO2 = self.o2Status == S.CRITICAL
   local highCO2 = self.co2Status == S.CRITICAL
-  if lowO2 and highCO2 then
-    self.failureCause = "both"
-  elseif lowO2 then
-    self.failureCause = "low_oxygen"
-  else
-    self.failureCause = "high_co2"
-  end
-end
-
--- Seconds left before game over (only meaningful while critical).
-function AirSystem:getCriticalTimeLeft()
-  return math.max(0, self.config.CRITICAL_TIME_LIMIT - self.criticalTimer)
+  if lowO2 and highCO2 then return "both" end
+  if lowO2 then return "low_oxygen" end
+  if highCO2 then return "high_co2" end
+  return nil
 end
 
 ------------------------------------------------------------------------------
--- Player interactions. Each returns ok (boolean), reason (string or nil).
-------------------------------------------------------------------------------
-
-function AirSystem:useOxygenGenerator()
-  local c = self.config
-  if self.missionFailed then return false, "mission_failed" end
-  if self.oxygenCanisters <= 0 then return false, "no_canisters" end
-  if self.power < c.O2_GEN_POWER_COST then return false, "no_power" end
-  self.oxygenCanisters = self.oxygenCanisters - 1
-  self.power = self.power - c.O2_GEN_POWER_COST
-  self.oxygenPercent = self.oxygenPercent + c.O2_GEN_BOOST_PERCENT
-  self:_refresh()
-  self:_clearTimerIfSafe()
-  return true
-end
-
-function AirSystem:useScrubber()
-  local c = self.config
-  if self.missionFailed then return false, "mission_failed" end
-  if self.scrubberFilterUses <= 0 then return false, "filter_full" end
-  if self.scrubberCooldown > 0 then return false, "cooldown" end
-  if self.power < c.SCRUBBER_POWER_COST then return false, "no_power" end
-  self.scrubberFilterUses = self.scrubberFilterUses - 1
-  self.power = self.power - c.SCRUBBER_POWER_COST
-  self.scrubberCooldown = c.SCRUBBER_COOLDOWN_SEC
-  self.carbonDioxidePercent = self.carbonDioxidePercent - c.SCRUBBER_REDUCE_PERCENT
-  self:_refresh()
-  self:_clearTimerIfSafe()
-  return true
-end
-
--- An interaction that fixes the air resets the timer immediately,
--- without waiting for the next update.
-function AirSystem:_clearTimerIfSafe()
-  if self.airStatus ~= S.CRITICAL then self.criticalTimer = 0 end
-end
-
-function AirSystem:setFarmWater(on) self.farmHasWater = on and true or false end
-function AirSystem:setFarmLight(on) self.farmLightOn = on and true or false end
-
-------------------------------------------------------------------------------
--- Player feedback (data only; the scene decides how to draw it)
+-- Player feedback (data only; a scene decides how to draw it)
 ------------------------------------------------------------------------------
 
 AirSystem.COLORS = {
@@ -227,11 +148,11 @@ AirSystem.COLORS = {
   critical = { 0.90, 0.15, 0.15 }, -- red
 }
 
-local FAILURE_MESSAGES = {
+AirSystem.FAILURE_MESSAGES = {
   low_oxygen = "The cabin air did not have enough oxygen for too long. "
-    .. "Mission Control needs you to restore oxygen with the Oxygen Generator.",
+    .. "Mission Control needs you to make oxygen with the Oxygen Maker.",
   high_co2 = "The cabin air had too much carbon dioxide for too long. "
-    .. "Mission Control needs you to remove carbon dioxide with the CO2 Scrubber.",
+    .. "Mission Control needs you to remove carbon dioxide with the CO2 Cleaner.",
   both = "The cabin air was unsafe for too long. "
     .. "Mission Control needs you to restore oxygen or remove carbon dioxide.",
 }
@@ -250,34 +171,35 @@ function AirSystem:_neededAction()
 end
 
 local ACTION_TEXT = {
-  generator   = "Use the Oxygen Generator!",
-  scrubber    = "Run the CO2 Scrubber!",
-  both        = "Use the Oxygen Generator AND the CO2 Scrubber!",
+  generator   = "Use the Oxygen Maker!",
+  scrubber    = "Run the CO2 Cleaner!",
+  both        = "Use the Oxygen Maker AND the CO2 Cleaner!",
   too_much_o2 = "Too much oxygen! Stop adding oxygen.",
 }
 
--- Returns { status, color, message, action, timeLeft, failed }
-function AirSystem:getFeedback()
+-- timeLeft: seconds on the shared emergency timer (from the coordinator).
+-- Returns { status, color, message, action, timeLeft }
+function AirSystem:getFeedback(timeLeft)
   local status = self.airStatus
   local fb = {
     status = status,
     color = AirSystem.COLORS[status],
     action = self:_neededAction(),
-    failed = self.missionFailed,
   }
-  if self.missionFailed then
-    fb.color = AirSystem.COLORS.critical
-    fb.message = FAILURE_MESSAGES[self.failureCause]
-  elseif status == S.GOOD then
+  if status == S.GOOD then
     fb.message = "The air is fresh and safe."
   elseif status == S.CAUTION then
     fb.message = "Check the air system."
   elseif status == S.DANGER then
     fb.message = "Warning! " .. ACTION_TEXT[fb.action]
   else
-    fb.timeLeft = self:getCriticalTimeLeft()
-    fb.message = string.format("EMERGENCY! %s %d seconds left!",
-      ACTION_TEXT[fb.action], math.ceil(fb.timeLeft))
+    fb.timeLeft = timeLeft
+    if timeLeft then
+      fb.message = string.format("EMERGENCY! %s %d seconds left!",
+        ACTION_TEXT[fb.action], math.ceil(timeLeft))
+    else
+      fb.message = "EMERGENCY! " .. ACTION_TEXT[fb.action]
+    end
   end
   return fb
 end
