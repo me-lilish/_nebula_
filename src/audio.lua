@@ -27,13 +27,20 @@ Audio.__index = Audio
 
 Audio.VOLUME = { music = 0.5, ambient = 0.55, sfx = 0.8 }
 Audio.FADE_SECONDS = 0.6         -- music cross-fade time
-Audio.STEP_DISTANCE = 48         -- world px walked per footstep
+Audio.STEP_VOLUME = { metal = 0.32, rubber = 0.45, regolith = 0.5 }
 Audio.HEAR_RADIUS = 650          -- machines are silent beyond this distance
 Audio.MUSIC = { ambient = "music_ambient", tension = "music_tension", crisis = "music_crisis" }
 
 ------------------------------------------------------------------------------
 -- Pure decisions
 ------------------------------------------------------------------------------
+
+-- Footsteps follow the walk animation (cycle 1-2-3-2): a boot touches the
+-- floor on frames 1 and 3, i.e. cycle positions 0 and 2.
+function Audio.stepPhase(anim, frameTime)
+  return math.floor(anim / frameTime) % 4
+end
+function Audio.isFootContact(phase) return phase == 0 or phase == 2 end
 
 local function isBad(status) return status == "danger" or status == "critical" end
 
@@ -116,7 +123,7 @@ function Audio.new()
   self.music, self.loops, self.sfx = {}, {}, {}
   self.musicGain = { ambient = 0, tension = 0, crisis = 0 }
   self.loopGain = {}
-  self.walked = 0
+  self.lastPhase = nil
   self.lastX, self.lastY = nil, nil
   if self.enabled then self:_load() end
   return self
@@ -158,7 +165,7 @@ function Audio:_load()
       end
     end
   end
-  local names = { "sfx_ok", "sfx_error", "sfx_unlock", "sfx_door" }
+  local names = { "sfx_ok", "sfx_error", "sfx_unlock", "sfx_door", "sfx_click", "sfx_hover" }
   for _, surface in ipairs({ "metal", "rubber", "regolith" }) do
     for i = 1, 3 do names[#names + 1] = "step_" .. surface .. i end
   end
@@ -226,18 +233,19 @@ function Audio:update(dt, room)
       end
     end
   end
-  -- footsteps
+  -- footsteps: on each foot contact of the walk cycle, only when Vulcan
+  -- really moves (not while pushing against a wall)
   local v = room.vulcan
-  if self.lastX and v.moving then
-    self.walked = self.walked + math.sqrt((v.x - self.lastX) ^ 2 + (v.y - self.lastY) ^ 2)
-    if self.walked >= Audio.STEP_DISTANCE then
-      self.walked = 0
+  local moved = self.lastX and ((v.x - self.lastX) ^ 2 + (v.y - self.lastY) ^ 2) > 0.04
+  if v.moving and moved then
+    local phase = Audio.stepPhase(v.anim, require("src.vulcan").FRAME_TIME)
+    if phase ~= self.lastPhase and Audio.isFootContact(phase) then
       local surface = Audio.surfaceAt(v.x, v.y)
-      local vol = surface == "rubber" and 0.75 or (surface == "regolith" and 0.8 or 0.55)
-      self:play("step_" .. surface .. love.math.random(1, 3), vol, 0.92 + love.math.random() * 0.16)
+      self:play("step_" .. surface .. love.math.random(1, 3), Audio.STEP_VOLUME[surface], 0.94 + love.math.random() * 0.12)
     end
-  elseif not v.moving then
-    self.walked = Audio.STEP_DISTANCE * 0.6 -- first step comes quickly
+    self.lastPhase = phase
+  else
+    self.lastPhase = nil -- the first step sounds as soon as Vulcan starts walking
   end
   self.lastX, self.lastY = v.x, v.y
   -- UI / event sounds queued by the room

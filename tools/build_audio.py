@@ -180,39 +180,51 @@ def music_crisis():
 
 
 # ---------------------------------------------------------------- footsteps
+def _lowpass(x, cutoff):
+    return band(np.concatenate([x, np.zeros(len(x))]), 0, cutoff)[: len(x)]
+
+
 def step_metal(seed):
+    """Boot on a steel deck: a short, dull 'tonk' with a quiet hollow echo
+    (no long high ring - kids hear this hundreds of times)."""
     r = np.random.default_rng(seed)
-    n = int(SR * 0.5)
-    x = band(r.standard_normal(n), 1500, 6000) * env(n, 0.001, 0.012) * 0.8
-    for f, a, d in ((1180 + r.integers(-60, 60), 0.6, 0.06), (2650, 0.35, 0.04), (4170, 0.25, 0.03)):
-        x += a * np.sin(2 * np.pi * f * np.arange(n) / SR) * env(n, 0.001, d)
-    x += 0.25 * tone(140, 0.5, 0.002, 0.03)[:n]
+    n = int(SR * 0.28)
+    tt = np.arange(n) / SR
+    f = 260 + r.integers(-25, 25)
+    x = 0.8 * np.sin(2 * np.pi * f * tt) * env(n, 0.002, 0.035)
+    x += 0.35 * np.sin(2 * np.pi * f * 2.7 * tt) * env(n, 0.001, 0.015)
+    x += 0.45 * _lowpass(r.standard_normal(n), 2200) * env(n, 0.001, 0.012)
+    x += 0.5 * np.sin(2 * np.pi * 95 * tt) * env(n, 0.003, 0.03)        # heel weight
     echo = np.zeros(n)
-    d = int(SR * 0.07)
-    echo[d:] = x[:-d] * 0.25
-    return x + echo
+    d = int(SR * 0.06)
+    echo[d:] = x[:-d] * 0.18
+    return _lowpass(x + echo, 3500)
 
 
 def step_rubber(seed):
+    """Boot on thick rubber matting: soft, padded thud."""
     r = np.random.default_rng(seed)
-    n = int(SR * 0.3)
-    x = tone(75 + r.integers(-8, 8), 0.3, 0.004, 0.05) + 0.5 * tone(150, 0.3, 0.004, 0.025)
-    x += 0.35 * band(r.standard_normal(n), 80, 600) * env(n, 0.003, 0.03)
-    return x
+    n = int(SR * 0.22)
+    tt = np.arange(n) / SR
+    x = np.sin(2 * np.pi * (85 + r.integers(-8, 8)) * tt) * env(n, 0.006, 0.04)
+    x += 0.35 * _lowpass(r.standard_normal(n), 700) * env(n, 0.004, 0.025)
+    return _lowpass(x, 900)
 
 
 def step_regolith(seed):
+    """Boot in fine moon dust: a soft, muffled crunch plus a quiet suit whirr."""
     r = np.random.default_rng(seed)
-    n = int(SR * 0.4)
+    n = int(SR * 0.32)
     grains = np.zeros(n)
-    for _ in range(70):                                # crunchy grains
-        i = int(abs(r.normal(0.06, 0.05)) * SR)
-        if i < n - 200:
-            grains[i:i + 200] += r.standard_normal(200) * np.exp(-np.arange(200) / 40) * r.uniform(0.3, 1)
-    x = band(grains, 700, 5000) * 0.9 + 0.4 * band(r.standard_normal(n), 100, 900) * env(n, 0.01, 0.06)
-    tt = np.arange(n) / SR                              # suit servo whirr
-    x += 0.06 * np.sin(2 * np.pi * (380 + 300 * tt) * tt) * env(n, 0.05, 0.12)
-    return x
+    for _ in range(45):
+        i = int(abs(r.normal(0.05, 0.035)) * SR)
+        if i < n - 160:
+            grains[i:i + 160] += r.standard_normal(160) * np.exp(-np.arange(160) / 30) * r.uniform(0.2, 1)
+    x = band(grains, 400, 2600) * 0.8
+    x += 0.5 * _lowpass(r.standard_normal(n), 500) * env(n, 0.01, 0.05)
+    tt = np.arange(n) / SR
+    x += 0.04 * np.sin(2 * np.pi * (300 + 200 * tt) * tt) * env(n, 0.05, 0.1)
+    return _lowpass(x, 3000)
 
 
 # ---------------------------------------------------------------- machine loops
@@ -317,6 +329,18 @@ def sfx_unlock():
     return np.concatenate(parts)
 
 
+def sfx_click():
+    """UI button press: a crisp, friendly blip."""
+    a = tone(1320, 0.05, 0.001, 0.012, (1, 0.25))
+    b = tone(1980, 0.09, 0.001, 0.03, (1, 0.2))
+    return np.concatenate([a, b]) + 0.0
+
+
+def sfx_hover():
+    """Mouse over a button: a tiny soft tick."""
+    return tone(1100, 0.05, 0.001, 0.01)
+
+
 def sfx_door():
     n = int(SR * 0.6)
     tt = np.arange(n) / SR
@@ -330,9 +354,9 @@ def main():
     save("music_tension", music_tension(), 0.6)
     save("music_crisis", music_crisis(), 0.6)
     for i in range(3):
-        save(f"step_metal{i + 1}", step_metal(10 + i), 0.7)
-        save(f"step_rubber{i + 1}", step_rubber(20 + i), 0.7)
-        save(f"step_regolith{i + 1}", step_regolith(30 + i), 0.6)
+        save(f"step_metal{i + 1}", step_metal(10 + i), 0.55)
+        save(f"step_rubber{i + 1}", step_rubber(20 + i), 0.6)
+        save(f"step_regolith{i + 1}", step_regolith(30 + i), 0.5)
     save("loop_air", loop_air(), 0.6)
     save("loop_air_broken", loop_air_broken(), 0.6)
     save("loop_water", loop_water(), 0.6)
@@ -344,6 +368,8 @@ def main():
     save("sfx_error", sfx_error(), 0.5)
     save("sfx_unlock", sfx_unlock(), 0.6)
     save("sfx_door", sfx_door(), 0.6)
+    save("sfx_click", sfx_click(), 0.5)
+    save("sfx_hover", sfx_hover(), 0.3)
 
 
 if __name__ == "__main__":

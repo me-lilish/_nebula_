@@ -70,4 +70,33 @@ test("the room queues UI sounds; audio without Love2D is a safe no-op", function
   a:update(0.1, r); eq(#r.sounds, 0)
 end)
 
+test("footsteps land on the walk cycle's foot contacts (2 per cycle)", function()
+  local Vulcan = require("src.vulcan")
+  local contacts, last = 0, nil
+  for i = 0, 99 do
+    local p = Audio.stepPhase(i * 0.02, Vulcan.FRAME_TIME)
+    if p ~= last and Audio.isFootContact(p) then contacts = contacts + 1 end
+    last = p
+  end
+  -- 2 s of walking = 3.57 walk cycles -> 7 or 8 steps
+  assert(contacts >= 7 and contacts <= 8, "steps: " .. contacts)
+end)
+
+test("menu buttons tick on hover and click when pressed", function()
+  local Menu = require("src.menu_scene")
+  local heard = {}
+  local m = setmetatable({ state = "menu", t = 0, buttons = {}, stars = {}, astroState = { angle = 0, x = 100, y = 100, vx = 0, vy = 0 },
+    sound = function(n) heard[#heard + 1] = n end }, Menu)
+  m.hit = function(_, x) return x > 0 and "start" or nil end
+  m:update(0.1, 10, 10); m:update(0.1, 10, 10)
+  eq(#heard, 1); eq(heard[1], "sfx_hover")
+  m:mousepressed(10, 10, 1)
+  eq(heard[2], "sfx_click"); eq(m.state, "briefing")
+  local quit = false
+  m.state = "menu"; m.onQuit = function() quit = true end
+  m.hit = function() return "abort" end
+  m:mousepressed(10, 10, 1)
+  eq(quit, false, "waits for the click to be heard"); m:update(0.25, -1, -1); eq(quit, true)
+end)
+
 T.finish()

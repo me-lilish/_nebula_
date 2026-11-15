@@ -67,9 +67,18 @@ function Menu:hit(mx, my)
   return nil
 end
 
+-- optional sound hook: menu.sound = function(name) ... end
+function Menu:_sound(name) if self.sound then self.sound(name) end end
+
 function Menu:update(dt, mx, my)
   self.t = self.t + dt
-  self.hover = (self.state == "menu") and self:hit(mx or -1, my or -1) or nil
+  local hover = (self.state == "menu") and self:hit(mx or -1, my or -1) or nil
+  if hover and hover ~= self.hover then self:_sound("sfx_hover") end
+  self.hover = hover
+  if self.quitTimer then
+    self.quitTimer = self.quitTimer - dt
+    if self.quitTimer <= 0 then self.quitTimer = nil; if self.onQuit then self.onQuit() end end
+  end
   local a = self.astroState
   a.angle = a.angle + 1.2 * dt
   a.x, a.y = a.x + a.vx * dt, a.y + a.vy * dt
@@ -84,15 +93,18 @@ end
 function Menu:mousepressed(x, y, button)
   if button ~= 1 then return end
   if self.state == "briefing" then
+    self:_sound("sfx_click")
     if self.onStart then self.onStart() end
     return
   end
   local id = self:hit(x, y)
+  if id then self:_sound("sfx_click") end
   if id == "start" then self.state = "briefing"
-  elseif id == "abort" and self.onQuit then self.onQuit() end
+  elseif id == "abort" then self.quitTimer = 0.2 end -- let the click be heard
 end
 
 function Menu:keypressed(key)
+  if key == "return" or key == "space" or key == "escape" then self:_sound("sfx_click") end
   if self.state == "briefing" then
     if key == "escape" then self.state = "menu"
     elseif self.onStart then self.onStart() end

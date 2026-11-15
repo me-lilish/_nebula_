@@ -715,7 +715,7 @@ end
 -- (sx, sy) are SCREEN coordinates. Returns the station clicked (or nil).
 function Room:mousepressed(sx, sy, button)
   if button ~= 1 then return nil end
-  if self.unlockCard and self.unlockCard.timer < 5.2 then self.unlockCard = nil end
+  if self.unlockCard and self.unlockCard.timer < 5.2 then self.unlockCard = nil; self:_sound("sfx_click") end
   self:_updateCamera()
   local m = self:machineAt(self:screenToWorld(sx, sy))
   if not m then return nil end
@@ -761,8 +761,8 @@ function Room:clickStation(m)
 end
 
 function Room:keypressed(key)
-  if key == "r" then self:reset() end
-  if key == "tab" then self.showTablet = not self.showTablet end
+  if key == "r" then self:reset(); self:_sound("sfx_click") end
+  if key == "tab" then self.showTablet = not self.showTablet; self:_sound("sfx_click") end
   if key == "e" and not self:isOver() then
     local m = self:_nearestMachine()
     if m then self:clickStation(m) else self:say("Move closer to a machine.") end

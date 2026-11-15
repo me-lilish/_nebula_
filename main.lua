@@ -51,6 +51,7 @@ function love.load(args)
   canvas = love.graphics.newCanvas(VW, VH)
   menu = Menu.new(startGame, function() love.event.quit() end)
   audio = Audio.new()
+  menu.sound = function(name) audio:play(name) end
 end
 
 function love.update(dt)
@@ -84,6 +85,7 @@ function love.keypressed(key)
   if mode == "menu" then
     menu:keypressed(key)
   elseif key == "escape" then
+    audio:play("sfx_click")
     menu.state = "menu"
     mode = "menu"
   else
