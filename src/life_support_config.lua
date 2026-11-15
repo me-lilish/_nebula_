@@ -208,6 +208,10 @@ config.HARVEST_POWER_COST = 0.5
 config.COMPOST_BATCH = 10            -- [GAME RULE] plant scraps per run
 config.COMPOST_FERTILIZER_OUT = 8    -- [GAME RULE]
 config.COMPOST_POWER_COST = 2        -- [GAME RULE]
+config.GROWLIGHT_BOOST = 25          -- [GAME RULE] growth % from a tuned light recipe
+config.GROWLIGHT_POWER_COST = 1      -- [GAME RULE]
+config.VALVE_TRANSFER = 20           -- [GAME RULE] clean water -> oxygen-line tank per balance
+config.VALVE_KEEP_POTABLE = 20       -- [GAME RULE] never drain the drinking water below this
 
 ------------------------------------------------------------------------------
 -- Water / hygiene status (Water Monitor)  [GAME RULE]

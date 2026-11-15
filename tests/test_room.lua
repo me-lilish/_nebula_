@@ -48,7 +48,7 @@ end
 local ROLE = {
   dustoff = "useSuitDustOff", water = "runWaterRecycler", toilet = "useToilet",
   oxygen = "runOxygenMaker", co2 = "runCO2Cleaner", recycler = "runCO2Recycler",
-  trace = "runTraceAirCleaner", greenhouse = "harvestGreenhouse", foodstorage = "storeCrops",
+  trace = "serviceDustFilter", valves = "balanceWaterTanks", growlight = "tuneGrowLights", greenhouse = "harvestGreenhouse", foodstorage = "storeCrops",
   compost = "runCompost", foodstation = "eatMeal", solar = "aimSolar", battery = "togglePowerSaver",
   regolith = "loadRegolith", shield = "deployShields", sleep = "toggleSleep", recycle = "recycleParts",
 }
@@ -67,7 +67,7 @@ end
 ------------------------------------------------------------------------------
 -- Layout
 ------------------------------------------------------------------------------
-test("all 17 player-facing stations have child names and technical names", function()
+test("all 19 player-facing stations have child names and technical names", function()
   local r = newRoom()
   local expect = {
     dustoff = "Brush Station", water = "Water Recycler", toilet = "Bathroom Pod",
@@ -75,8 +75,9 @@ test("all 17 player-facing stations have child names and technical names", funct
     greenhouse = "Hydroponic Garden", foodstorage = "Food Cooler", compost = "Composter",
     foodstation = "Food Dispenser", solar = "Solar Array Control", battery = "Battery Bank",
     regolith = "Regolith Hopper", shield = "Shield Holo-Table", sleep = "Bunk Bed", recycle = "Machine Recycler",
+    valves = "Tank Valves", growlight = "Grow-Light Timer",
   }
-  eq(#r.machines, 17)
+  eq(#r.machines, 19)
   for id, title in pairs(expect) do
     local m = station(r, id)
     if not m then error("missing station " .. id) end
@@ -106,8 +107,8 @@ test("stations follow the team's station layout", function()
   local expect = {
     sleep = "quarters", foodstation = "quarters", toilet = "quarters",          -- 1 human
     dustoff = "airlock", trace = "airlock",                                     -- 2 dust
-    water = "water",                                                            -- 3 water
-    greenhouse = "food", foodstorage = "food",                                  -- 4 food
+    water = "water", valves = "water",                                          -- 3 water
+    greenhouse = "food", foodstorage = "food", growlight = "food",              -- 4 food
     compost = "waste", recycle = "waste",                                       -- 5 waste
     oxygen = "air", co2 = "air", recycler = "air",                              -- 6 air
     solar = "power", battery = "batteries",                                     -- 7 power
@@ -280,7 +281,7 @@ test("dirty entry adds suit dust to the cabin once", function()
   eq(r.message, "Oops! Dust entered the cabin."); eq(r.dust.cabinDust, 60)
   for _ = 1, 3 do walkOut(r); walk(r, "right", 30) end
   eq(r.dust.cabinDust, 60)
-  eq(use(r, "trace"), "The cabin air is clean again!"); eq(r.dust.dustCleanliness, 100)
+  eq(use(r, "trace"), "Fresh HEPA filter locked in - the cabin air is clean!"); eq(r.dust.dustCleanliness, 100)
 end)
 test("dust in the room never changes O2, CO2 or the air score", function()
   local r = newStillRoom()

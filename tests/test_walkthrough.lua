@@ -87,7 +87,8 @@ end
 
 test("a walking bot finishes the whole campaign", function()
   release()
-  local r = Room.new({ isDown = isDown, campaign = true })
+  local r = Room.new({ isDown = isDown, campaign = true, puzzles = true })
+  local puzzles = 0
   local log = {}
   local guard = 0
   while not r.missionComplete do
@@ -110,6 +111,15 @@ test("a walking bot finishes the whole campaign", function()
       walkTo(r, station, nearGoal(r, m))
       if station == "solar" then while not r.ls:isSunUp() do r:update(0.5) end end
       r:clickStation(m)
+      if r.puzzles:isOpen() then
+        -- play the mini-game (solved through its own rules), then close it
+        puzzles = puzzles + 1
+        r.puzzles.active:update(0.05)
+        r.puzzles.active:solve()
+        local guardP = 0
+        while r.puzzles:isOpen() and guardP < 200 do r:update(0.05); guardP = guardP + 1 end
+        assert(not r.puzzles:isOpen(), "puzzle " .. m.puzzle .. " did not close")
+      end
       if os.getenv("WALK_LOG") then print(string.format("L%d %-12s %s", r.mission.level, station, tostring(r.message))) end
       log[#log + 1] = string.format("L%d %-12s %s", r.mission.level, station, tostring(r.message))
       if r.ls.co2CleanerCooldown > 0 and station == "co2" then r:update(0.1) end
@@ -117,6 +127,7 @@ test("a walking bot finishes the whole campaign", function()
   end
   eq(r.missionComplete, true)
   eq(r.ls.missionFailed, false)
+  assert(puzzles >= 17, "every mini-game was played (" .. puzzles .. ")")
 end)
 
 test("every machine and the outer door can be reached on foot (sandbox)", function()

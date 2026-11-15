@@ -11,6 +11,7 @@ local files = {
   "tests/test_guide.lua",
   "tests/test_progression.lua",
   "tests/test_audio.lua",
+  "tests/test_puzzles.lua",
   "tests/test_walkthrough.lua",
 }
 -- Use the same Lua that is running this script.

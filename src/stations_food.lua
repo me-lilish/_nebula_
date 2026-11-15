@@ -104,4 +104,24 @@ return function(LifeSupport)
     self:_afterAction()
     return true
   end
+
+  -- Grow-Light Timer (Photosynthesis Tuner mini-game): the right red/blue
+  -- light recipe gives the plants a growth boost.
+  function LifeSupport:canTuneGrowLights()
+    local c = self.config
+    if self.missionFailed then return false, "mission_failed" end
+    if self.growth >= 100 - EPS then return false, "already_ripe" end
+    if not self:canSpend(c.GROWLIGHT_POWER_COST) then return false, "no_power" end
+    return true
+  end
+
+  function LifeSupport:tuneGrowLights()
+    local ok, reason = self:canTuneGrowLights()
+    if not ok then return false, reason end
+    local c = self.config
+    self:trySpend(c.GROWLIGHT_POWER_COST)
+    self.growth = math.min(100, self.growth + c.GROWLIGHT_BOOST)
+    self:_afterAction()
+    return true
+  end
 end

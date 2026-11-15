@@ -9,9 +9,9 @@
   (LifeSupport autopilot) so they stay safe until the child learns them.
 
     1 Human     Crew Quarters            eat, bathroom, sleep
-    2 Dust      Airlock                  go outside, brush suit, walk in
-    3 Water     Hydro-Plumbing Bay       Water Recycler
-    4 Food      Pantry & Hydroponics     harvest, store crops
+    2 Dust      Airlock                  go outside, brush suit, walk in, new HEPA filter
+    3 Water     Hydro-Plumbing Bay       reconnect pipes, balance tank valves
+    4 Food      Pantry & Hydroponics     tune grow lights, harvest, store crops
     5 Waste     Recycling Workshop       compost, recycle broken parts
     6 Air       Atmosphere Hub           oxygen, CO2 cleaner, CO2 recycler
     7 Power     Power Grid + Battery     Power Saver, aim solar panels
@@ -34,16 +34,19 @@ Mission.LEVELS = {
       { id = "outside", station = "outside", text = "Go out through the airlock onto the Moon." },
       { id = "dustoff", station = "dustoff", text = "Come back and brush the dust off your suit." },
       { id = "entrance", station = "entrance", text = "Walk in through the inner airlock door." },
+      { id = "trace", station = "trace", text = "Swap the clogged HEPA filter in the Dust Filter Unit." },
     } },
   { id = "water", name = "WATER SYSTEM", room = "Hydro-Plumbing Bay", rooms = { "water" },
     lesson = "On the Moon, used water is cleaned and used again and again.",
     tasks = {
-      { id = "water", station = "water", text = "Run the Water Recycler." },
+      { id = "water", station = "water", text = "Reconnect the pipes at the Water Recycler." },
+      { id = "valves", station = "valves", text = "Balance the Tank Valves." },
     } },
   { id = "food", name = "FOOD SYSTEM", room = "Pantry & Hydroponics", rooms = { "food" },
     lesson = "Plants grow without soil under special lights: hydroponics!",
     tasks = {
-      { id = "greenhouse", station = "greenhouse", text = "Harvest the ripe plants." },
+      { id = "growlight", station = "growlight", text = "Tune the Grow-Light Timer." },
+      { id = "greenhouse", station = "greenhouse", text = "Plant and harvest at the Hydroponic Garden." },
       { id = "foodstorage", station = "foodstorage", text = "Put the crops in the Food Cooler." },
     } },
   { id = "waste", name = "WASTE SYSTEM", room = "Recycling Workshop", rooms = { "waste" },

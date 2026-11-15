@@ -103,4 +103,26 @@ return function(LifeSupport)
     self:_afterAction()
     return true, nil, moved
   end
+
+  -- Tank Valves (Gallon Gauge Stabilizer mini-game): send clean water to the
+  -- oxygen-line tank that feeds the Oxygen Generator.
+  function LifeSupport:canBalanceWaterTanks()
+    local c = self.config
+    if self.missionFailed then return false, "mission_failed" end
+    if self:_space("processWater") < 1 then return false, "tanks_full" end
+    if self.potableWater < c.VALVE_TRANSFER + c.VALVE_KEEP_POTABLE then return false, "no_water" end
+    return true
+  end
+
+  -- Returns ok, reason, litres moved
+  function LifeSupport:balanceWaterTanks()
+    local ok, reason = self:canBalanceWaterTanks()
+    if not ok then return false, reason end
+    local c = self.config
+    local amount = math.min(c.VALVE_TRANSFER, self:_space("processWater"))
+    self.potableWater = self.potableWater - amount
+    self.processWater = self.processWater + amount
+    self:_afterAction()
+    return true, nil, amount
+  end
 end

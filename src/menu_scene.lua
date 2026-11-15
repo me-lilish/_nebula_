@@ -202,7 +202,7 @@ function Menu:_drawBriefing()
     lg.printf(s[3], bx + 66, by + 14, 310, "left")
   end
   lg.setFont(Theme.font(17)); Theme.set(C.cyanLight)
-  lg.printf("Walk: arrow keys or WASD      Use a machine: walk close + click it      Follow the arrow!",
+  lg.printf("Walk: arrows or WASD   Sprint: hold Shift   Use a machine: walk close + click (or E)   Follow the arrow!",
     x, y + 430, w, "center")
   Theme.panel(x + w / 2 - 190, y + 480, 380, 58, { cut = 14, fill = C.cyanMid, edge = C.cyan, lineWidth = 3 })
   Theme.outlinedText("CLICK TO BEGIN", x + w / 2 - 190, y + 494, 380, "center", C.cyan, C.ink,

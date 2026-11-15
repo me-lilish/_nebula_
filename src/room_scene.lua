@@ -10,7 +10,7 @@
   outside = src/render/exterior.lua (open lunar surface), machines =
   src/render/machines.lua, furniture = src/render/props.lua, HUD = src/ui/hud.lua.
 
-  Controls: arrows / WASD walk, left-click (or E) a station when close,
+  Controls: arrows / WASD walk, Shift sprint, left-click (or E) a station when close,
             Tab tablet, M mute sound, R restart, Esc back to the menu (main.lua).
 
   The logic part (movement, range, clicks, messages, camera, progression)
@@ -22,6 +22,7 @@ local Vulcan = require("src.vulcan")
 local Map = require("src.station_map")
 local Guide = require("src.guide")
 local Mission = require("src.mission_state")
+local PuzzleManager = require("src.puzzles.manager")
 
 local Room = {}
 Room.__index = Room
@@ -77,6 +78,7 @@ Room.STATE_TAGS = {
   loader_full = { "Regolith loaded", "grey" },
   no_regolith = { "Load regolith first", "grey" },
   no_parts = { "No broken parts", "grey" },
+  already_ripe = { "Ripe - harvest!", "grey" },
 }
 local RED = {}
 for reason, tag in pairs(Room.STATE_TAGS) do if tag[2] == "red" then RED[reason] = true end end
@@ -100,7 +102,7 @@ local function makeStations()
   return {
     -- 1 HUMAN: Crew Quarters
     S {
-      id = "sleep", room = "quarters", title = "Bunk Bed", tech = "Crew quarters rest cycle",
+      id = "sleep", puzzle = "sheep", room = "quarters", title = "Bunk Bed", tech = "Crew quarters rest cycle",
       subtitle = "Sleep 8 hours",
       run = function(ls) return ls:toggleSleep() end,
       check = function(ls) return ls:canToggleSleep() end,
@@ -112,7 +114,7 @@ local function makeStations()
       },
     },
     S {
-      id = "foodstation", room = "quarters", title = "Food Dispenser", tech = "Galley ration replicator",
+      id = "foodstation", puzzle = "oven", room = "quarters", title = "Food Dispenser", tech = "Galley ration replicator",
       subtitle = "Eat a warm meal",
       run = function(ls) return ls:eatMeal() end,
       check = function(ls) return ls:canEatMeal() end,
@@ -127,7 +129,7 @@ local function makeStations()
       },
     },
     S {
-      id = "toilet", room = "quarters", title = "Bathroom Pod", tech = "Waste Hygiene Unit",
+      id = "toilet", puzzle = "scrub", room = "quarters", title = "Bathroom Pod", tech = "Waste Hygiene Unit",
       subtitle = "Bathroom + sealing",
       run = function(ls) return ls:useToilet() end,
       check = function(ls) return ls:canUseToilet() end,
@@ -147,7 +149,7 @@ local function makeStations()
     },
     -- 2 DUST: Airlock & Suit Decontamination Bay
     S {
-      id = "dustoff", room = "airlock", title = "Brush Station", tech = "Suit decontamination",
+      id = "dustoff", puzzle = "brush", room = "airlock", title = "Brush Station", tech = "Suit decontamination",
       subtitle = "Brush the dust off!",
       run = function(ls) return ls:useSuitDustOff() end,
       check = function(ls) return ls:canUseSuitDustOff() end,
@@ -157,13 +159,13 @@ local function makeStations()
       problems = { already_clean = "Your suit is already clean!", no_power = "The Brush Station needs power!" },
     },
     S {
-      id = "trace", room = "airlock", title = "Dust Filter Unit", tech = "HEPA particulate filter",
+      id = "trace", puzzle = "hepa", room = "airlock", title = "Dust Filter Unit", tech = "HEPA particulate filter",
       subtitle = "Catches lunar dust!",
-      run = function(ls) return ls:runTraceAirCleaner() end,
-      check = function(ls) return ls:canRunTraceAirCleaner() end,
+      run = function(ls) return ls:serviceDustFilter() end,
+      check = function(ls) return ls:canServiceDustFilter() end,
       info = function(ls) return "Filter life " .. ls.dust.filterUses end,
       fx = { "spark", "Clean air!" },
-      success = "The cabin air is clean again!",
+      success = "Fresh HEPA filter locked in - the cabin air is clean!",
       problems = {
         already_clean = "The cabin is already clean!",
         filter_full = "Dust filter full! It needs a new HEPA cartridge.",
@@ -172,7 +174,7 @@ local function makeStations()
     },
     -- 3 WATER: Hydro-Plumbing & Storage Bay
     S {
-      id = "water", room = "water", title = "Water Recycler", tech = "Water Recovery System",
+      id = "water", puzzle = "pipes", room = "water", title = "Water Recycler", tech = "Water Recovery System",
       subtitle = "Used water into clean water",
       run = function(ls) return ls:runWaterRecycler() end,
       check = function(ls) return ls:canRunWaterRecycler() end,
@@ -180,9 +182,35 @@ local function makeStations()
       fx = { "drop", "+clean water" }, success = "Three steps complete: clean water is ready!",
       problems = { nothing_to_recycle = "No used water yet.", tanks_full = "The clean-water tanks are full!", no_power = "The Water Recycler needs power!" },
     },
+    S {
+      id = "valves", puzzle = "valves", room = "water", title = "Tank Valves", tech = "Water storage pressure",
+      subtitle = "Fill the O2-line tank",
+      run = function(ls) return ls:balanceWaterTanks() end,
+      check = function(ls) return ls:canBalanceWaterTanks() end,
+      info = function(ls) return string.format("Clean %d%%  O2-line %d%%", f0(ls.potableWater), f0(ls.processWater)) end,
+      fx = { "drop", "Balanced!" },
+      success = function(n) return string.format("Tanks balanced: %d litres sent to the Oxygen Generator line.", n or 0) end,
+      problems = {
+        tanks_full = "The oxygen-line tank is already full!",
+        no_water = "Not enough clean water to share. Run the Water Recycler.",
+      },
+    },
     -- 4 FOOD: Pantry & Hydroponics Bay
     S {
-      id = "greenhouse", room = "food", title = "Hydroponic Garden", tech = "Greenhouse growth unit",
+      id = "growlight", puzzle = "spectrum", room = "food", title = "Grow-Light Timer", tech = "LED light spectrum",
+      subtitle = "Tune the plant lights",
+      run = function(ls) return ls:tuneGrowLights() end,
+      check = function(ls) return ls:canTuneGrowLights() end,
+      info = function(ls) return string.format("Plant growth %d%%", math.floor(ls.growth)) end,
+      fx = { "leaf", "Grow boost!" },
+      success = "Perfect light recipe: the plants shot up!",
+      problems = {
+        already_ripe = "The plants are already ripe - harvest them!",
+        no_power = "The grow lights need power!",
+      },
+    },
+    S {
+      id = "greenhouse", puzzle = "seedtray", room = "food", title = "Hydroponic Garden", tech = "Greenhouse growth unit",
       subtitle = "Grows food slowly",
       run = function(ls) return ls:harvestGreenhouse() end,
       check = function(ls) return ls:canHarvestGreenhouse() end,
@@ -213,7 +241,7 @@ local function makeStations()
     },
     -- 5 WASTE: Recycling & Salvage Workshop
     S {
-      id = "compost", room = "waste", title = "Composter", tech = "Organic waste recycler",
+      id = "compost", puzzle = "compost", room = "waste", title = "Composter", tech = "Organic waste recycler",
       subtitle = "Scraps to fertilizer",
       run = function(ls) return ls:runCompost() end,
       check = function(ls) return ls:canRunCompost() end,
@@ -227,7 +255,7 @@ local function makeStations()
       },
     },
     S {
-      id = "recycle", room = "waste", title = "Machine Recycler", tech = "Shredder + recycling furnace",
+      id = "recycle", puzzle = "salvage", room = "waste", title = "Machine Recycler", tech = "Shredder + recycling furnace",
       subtitle = "Broken parts to spares",
       run = function(ls) return ls:recycleParts() end,
       check = function(ls) return ls:canRecycleParts() end,
@@ -241,7 +269,7 @@ local function makeStations()
     },
     -- 6 AIR: Atmospheric Control & Vent Hub
     S {
-      id = "oxygen", room = "air", title = "Oxygen Generator", tech = "Water electrolysis",
+      id = "oxygen", puzzle = "gasmix", room = "air", title = "Oxygen Generator", tech = "Water electrolysis",
       subtitle = "Water into oxygen!",
       run = function(ls) return ls:runOxygenMaker() end,
       check = function(ls) return ls:canRunOxygenMaker() end,
@@ -254,7 +282,7 @@ local function makeStations()
       },
     },
     S {
-      id = "co2", room = "air", title = "CO₂ Scrubber", tech = "Carbon Dioxide Removal",
+      id = "co2", puzzle = "chemmix", room = "air", title = "CO₂ Scrubber", tech = "Carbon Dioxide Removal",
       subtitle = "Catches used air!",
       run = function(ls) return ls:runCO2Cleaner() end,
       check = function(ls) return ls:canRunCO2Cleaner() end,
@@ -289,7 +317,7 @@ local function makeStations()
     },
     -- 7 POWER: Power Grid Room + Battery Bank
     S {
-      id = "solar", room = "power", title = "Solar Array Control", tech = "Power distribution unit",
+      id = "solar", puzzle = "oscillo", room = "power", title = "Solar Array Control", tech = "Power distribution unit",
       subtitle = "Aim the panels at the Sun",
       run = function(ls) return ls:aimSolar() end,
       check = function(ls) return ls:canAimSolar() end,
@@ -303,7 +331,7 @@ local function makeStations()
       },
     },
     S {
-      id = "battery", room = "batteries", title = "Battery Bank", tech = "Power manager",
+      id = "battery", puzzle = "breaker", room = "batteries", title = "Battery Bank", tech = "Power manager",
       subtitle = "Power Saver on / off",
       run = function(ls) return ls:togglePowerSaver() end,
       check = function(ls) return ls:canTogglePowerSaver() end,
@@ -317,7 +345,7 @@ local function makeStations()
     },
     -- 8 RADIATION: Radiation Shielding & Command Center
     S {
-      id = "regolith", room = "comms", title = "Regolith Hopper", tech = "Lunar soil collector",
+      id = "regolith", puzzle = "excavate", repeatRun = true, room = "comms", title = "Regolith Hopper", tech = "Lunar soil collector",
       subtitle = "Load Moon soil",
       run = function(ls) return ls:loadRegolith() end,
       check = function(ls) return ls:canLoadRegolith() end,
@@ -331,7 +359,7 @@ local function makeStations()
       },
     },
     S {
-      id = "shield", room = "comms", title = "Shield Holo-Table", tech = "Sectional radiation shielding",
+      id = "shield", puzzle = "armor", room = "comms", title = "Shield Holo-Table", tech = "Sectional radiation shielding",
       subtitle = "Place regolith shields",
       run = function(ls) return ls:deployShields() end,
       check = function(ls) return ls:canDeployShields() end,
@@ -381,6 +409,10 @@ function Room.new(opts)
   self.time = 0
   self.showTablet = false
   self.missionComplete = false
+  -- mini-games: on in the real game (main.lua), off by default so logic
+  -- tests can click stations directly
+  self.usePuzzles = opts.puzzles == true
+  self.puzzles = PuzzleManager.new()
   self:reset()
   return self
 end
@@ -408,6 +440,7 @@ function Room:reset()
   self.showTablet, self.missionComplete = false, false
   self.message, self.messageTimer = nil, 0
   self.sounds = {}       -- sound names for src/audio.lua to play this frame
+  if self.puzzles then self.puzzles.active = nil end
   for _, m in ipairs(self.machines) do m.act = 0 end
   if self.fx then self.fx = require("src.render.fx").new() end -- clear old effects
   self:_refreshGuide()
@@ -440,10 +473,13 @@ function Room:_onUnlock(level)
   local ls = self.ls
   ls.autopilot = self.mission:autopilot()
   local id = level.id
-  if id == "water" then
+  if id == "dust" then
+    ls.dust.filterUses = 1 -- the HEPA filter is clogged: time for a new one
+    ls.dust:_refresh()
+  elseif id == "water" then
     ls.wastewater = math.max(ls.wastewater, 20)
   elseif id == "food" then
-    ls.growth = 100
+    ls.growth = 75 -- the grow-light tune brings the first crop to ripe
     ls.food = math.min(ls.food, 60)
   elseif id == "waste" then
     ls.salvageParts = ls.salvageParts + 3
@@ -621,9 +657,17 @@ end
 
 function Room:update(dt)
   self.time = self.time + dt
+  if self.puzzles:isOpen() then
+    -- the station is paused while Vulcan works on a mini-game
+    self.vulcan.moving = false
+    self.puzzles:update(dt)
+    if self.fx then self.fx:update(dt) end
+    return
+  end
   local v = self.vulcan
   if not self:isOver() and not self.human.isSleeping then
     local oldX, oldY = v.x, v.y
+    local animBefore = v.anim
     v:update(dt, self.isDown, self.bounds, self.human:isFatigued() and Room.TIRED_SPEED or 1)
     -- Slide along walls: try the full move, then each axis on its own.
     local nx, ny = v.x, v.y
@@ -651,6 +695,8 @@ function Room:update(dt)
         end
       end
     end
+    v.prevX, v.prevY, v.baseAnim = oldX, oldY, animBefore
+    v:stepAnimation()
     -- Inside <-> outside through the outer airlock door
     local nowOut = Map.isOutside(v.x, v.y)
     if nowOut ~= self.outside then
@@ -713,7 +759,81 @@ function Room:update(dt)
 end
 
 -- (sx, sy) are SCREEN coordinates. Returns the station clicked (or nil).
+-- Runs a station's action (after its mini-game was won, or directly when
+-- mini-games are off): messages, effects, sounds and mission progress.
+function Room:_runStation(m, fromPuzzle)
+  local ok, reason, extra = m.run(self.ls)
+  if ok and m.repeatRun and fromPuzzle then
+    -- e.g. one excavation fills the whole regolith hopper
+    for _ = 1, 8 do
+      local again, _, more = m.run(self.ls)
+      if not again then break end
+      extra = (extra or 0) + (more or 0)
+    end
+  end
+  if ok then
+    self:say(type(m.success) == "function" and m.success(extra) or m.success)
+    self:_sound("sfx_ok")
+    m.act = 1
+    if m.fx then
+      self:_effect(m.fx[1], m.x + m.w / 2, m.y + m.h / 3, 16)
+      self:_label(m.fx[2], m.x + m.w / 2, m.y - 10)
+    end
+    -- the shield task only counts once every section is covered
+    if m.id ~= "shield" then self:_completeTask(m.id) end
+  else
+    self:_problem(m, reason)
+  end
+  self:_checkAutoTasks()
+  self:_refreshGuide()
+  return ok
+end
+
+function Room:_problem(m, reason)
+  local text = m.problems[reason] or "That station can't help right now."
+  if reason == "cooldown" then text = string.format(text, math.ceil(self.ls.co2CleanerCooldown)) end
+  self:say(text)
+  self:_sound("sfx_error")
+end
+
+-- Options a station's mini-game needs from the live mission
+function Room:_puzzleOptions(m)
+  local opts = {}
+  if m.puzzle == "armor" then
+    local rad = self.ls.radiation
+    opts.sections, opts.alreadyShielded = {}, {}
+    for i, id in ipairs(rad.order) do
+      local sec = rad.sections[id]
+      opts.sections[i] = sec.name
+      opts.alreadyShielded[i] = sec.shielded
+    end
+    local left = rad.phase == "warning" and rad:timeToStorm() or nil
+    opts.timeLimit = math.max(30, math.min(75, left or 75))
+  end
+  return opts
+end
+
+-- Opens the station's mini-game; winning it runs the station
+function Room:_startPuzzle(m)
+  self:_sound("sfx_click")
+  self.puzzles:start(m.puzzle, self:_puzzleOptions(m), function(won, p, cancelled)
+    if won then
+      self:_runStation(m, true)
+    elseif not cancelled then
+      self:say("Not quite! Try the " .. self:_t(m.title) .. " again.")
+      self:_sound("sfx_error")
+    end
+  end)
+end
+
+-- (sx, sy) are SCREEN coordinates. Returns the station clicked (or nil).
 function Room:mousepressed(sx, sy, button)
+  if self.puzzles:isOpen() then
+    local before = self.puzzles.active
+    self.puzzles:mousepressed(sx, sy, button)
+    if self.puzzles.active == before and before and before.state == "play" then self:_sound("sfx_hover") end
+    return nil
+  end
   if button ~= 1 then return nil end
   if self.unlockCard and self.unlockCard.timer < 5.2 then self.unlockCard = nil; self:_sound("sfx_click") end
   self:_updateCamera()
@@ -729,28 +849,24 @@ function Room:mousepressed(sx, sy, button)
   elseif not self:isNear(m) then
     self:say(Room.TEXT.tooFar)
     self:_sound("sfx_error")
+  elseif self.usePuzzles and m.puzzle then
+    local ok, reason = m.check(self.ls)
+    if ok then self:_startPuzzle(m) else self:_problem(m, reason) end
   else
-    local ok, reason, extra = m.run(self.ls)
-    if ok then
-      self:say(type(m.success) == "function" and m.success(extra) or m.success)
-      self:_sound("sfx_ok")
-      m.act = 1
-      if m.fx then
-        self:_effect(m.fx[1], m.x + m.w / 2, m.y + m.h / 3, 16)
-        self:_label(m.fx[2], m.x + m.w / 2, m.y - 10)
-      end
-      -- the shield task only counts once every section is covered
-      if m.id ~= "shield" then self:_completeTask(m.id) end
-    else
-      local text = m.problems[reason] or "That station can't help right now."
-      if reason == "cooldown" then text = string.format(text, math.ceil(self.ls.co2CleanerCooldown)) end
-      self:say(text)
-      self:_sound("sfx_error")
-    end
+    self:_runStation(m)
+    return m
   end
   self:_checkAutoTasks()
   self:_refreshGuide()
   return m
+end
+
+function Room:mousereleased(sx, sy, button)
+  if self.puzzles:isOpen() then self.puzzles:mousereleased(sx, sy, button) end
+end
+
+function Room:mousemoved(sx, sy)
+  if self.puzzles:isOpen() then self.puzzles:mousemoved(sx, sy) end
 end
 
 -- Clicks the centre of a station (world) through the screen, as a player would.
@@ -761,6 +877,11 @@ function Room:clickStation(m)
 end
 
 function Room:keypressed(key)
+  if self.puzzles:isOpen() then
+    if key == "escape" then self:_sound("sfx_click") end
+    self.puzzles:keypressed(key)
+    return
+  end
   if key == "r" then self:reset(); self:_sound("sfx_click") end
   if key == "tab" then self.showTablet = not self.showTablet; self:_sound("sfx_click") end
   if key == "e" and not self:isOver() then
@@ -1007,6 +1128,7 @@ function Room:draw()
   if self.unlockCard then self.HUD.drawUnlock(self.unlockCard, t) end
 
   if self:isOver() then self:_drawGameOver() elseif self.missionComplete then self:_drawMissionComplete() end
+  self.puzzles:draw(t)
 end
 
 function Room:_drawMissionComplete()

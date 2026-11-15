@@ -121,4 +121,26 @@ return function(LifeSupport)
     self:_afterAction()
     return result
   end
+
+  -- Dust Filter Unit service (HEPA Cartridge Alignment mini-game):
+  -- a fresh HEPA cartridge (full filter life) and a clean cabin.
+  function LifeSupport:canServiceDustFilter()
+    if self.missionFailed then return false, "mission_failed" end
+    local d = self.dust
+    if d.filterUses >= d.config.FILTER_USES and d.cabinDust <= EPS then return false, "already_clean" end
+    if not self:canSpend(d.config.FILTER_POWER_COST or 1) then return false, "no_power" end
+    return true
+  end
+
+  function LifeSupport:serviceDustFilter()
+    local ok, reason = self:canServiceDustFilter()
+    if not ok then return false, reason end
+    local d = self.dust
+    self:trySpend(d.config.FILTER_POWER_COST or 1)
+    d.filterUses = d.config.FILTER_USES
+    d.cabinDust = 0
+    d:_refresh()
+    self:_afterAction()
+    return true
+  end
 end

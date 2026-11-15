@@ -17,14 +17,17 @@ Vulcan.__index = Vulcan
 Vulcan.SPEED = 220        -- world pixels per second
 Vulcan.RADIUS = 22        -- collision circle around the feet
 Vulcan.HEIGHT = 96        -- drawn sprite height
-Vulcan.FRAME_TIME = 0.14  -- seconds per walk frame
+Vulcan.FRAME_TIME = 0.14  -- seconds per walk frame (at walking speed)
+Vulcan.SPRINT = 1.7       -- Shift: sprint speed multiplier
 
 function Vulcan.new(x, y)
   return setmetatable({ x = x, y = y, radius = Vulcan.RADIUS, facing = -1, moving = false, anim = 0 }, Vulcan)
 end
 
 -- isDown(key) -> boolean (love.keyboard.isDown in the game, a stub in tests)
--- speedMul (optional): < 1 when Vulcan is exhausted
+-- speedMul (optional): < 1 when Vulcan is exhausted (no sprinting then).
+-- The walk animation advances with the distance actually covered (see
+-- Vulcan:stepAnimation), so legs never slide or "moonwalk" into walls.
 function Vulcan:update(dt, isDown, bounds, speedMul)
   local dx, dy = 0, 0
   if isDown("left") or isDown("a") then dx = dx - 1 end
@@ -33,11 +36,13 @@ function Vulcan:update(dt, isDown, bounds, speedMul)
   if isDown("down") or isDown("s") then dy = dy + 1 end
   if dx ~= 0 and dy ~= 0 then dx, dy = dx * 0.7071, dy * 0.7071 end
 
-  self.moving = dx ~= 0 or dy ~= 0
+  self.wantsToMove = dx ~= 0 or dy ~= 0
   if dx < 0 then self.facing = -1 elseif dx > 0 then self.facing = 1 end
-  self.anim = self.moving and (self.anim + dt) or 0
+  local tired = (speedMul or 1) < 1
+  self.sprinting = self.wantsToMove and not tired and (isDown("lshift") or isDown("rshift"))
+  self.prevX, self.prevY = self.x, self.y
 
-  local speed = Vulcan.SPEED * (speedMul or 1)
+  local speed = Vulcan.SPEED * (speedMul or 1) * (self.sprinting and Vulcan.SPRINT or 1)
   self.x = self.x + dx * speed * dt
   self.y = self.y + dy * speed * dt
   if bounds then
@@ -45,6 +50,20 @@ function Vulcan:update(dt, isDown, bounds, speedMul)
     self.x = math.max(bounds.left + r, math.min(bounds.right - r, self.x))
     self.y = math.max(bounds.top + r, math.min(bounds.bottom - r, self.y))
   end
+  self:stepAnimation()
+end
+
+-- Call again after the caller moved Vulcan back from a wall: the legs only
+-- move as far as the body really travelled.
+function Vulcan:stepAnimation()
+  local d = math.sqrt((self.x - (self.prevX or self.x)) ^ 2 + (self.y - (self.prevY or self.y)) ^ 2)
+  self.moving = d > 0.01
+  if self.moving then
+    self.anim = (self.baseAnim or self.anim) + d / Vulcan.SPEED
+  else
+    self.anim = 0
+  end
+  self.baseAnim = nil
 end
 
 ------------------------------------------------------------------------------

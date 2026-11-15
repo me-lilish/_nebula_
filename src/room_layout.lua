@@ -38,9 +38,11 @@ M.dustoff = place("brush_station", 262, 988, 140)     -- brushes + static mat in
 M.trace = place("air_filter", 575, 1032, 118)         -- dust filtration unit above the inner door
 -- SYSTEM 3  Hydro-Plumbing & Storage Bay
 M.water = { sprite = "purifier", x = 1086, y = 108, w = 318, h = 124 } -- 3-stage purifier, back wall
+M.valves = { sprite = "water_tank", x = 1396, y = 494, w = 202, h = 148 } -- main storage tanks + valves
 -- SYSTEM 4  Pantry & Hydroponics Bay
 M.greenhouse = place("hydroponics", 2005, 1640, 250)  -- tiered grow unit, upper half
 M.foodstorage = place("freezer", 2318, 1762, 120)     -- insulated cooler, right wall
+M.growlight = place("temp_panel", 2323, 1462, 86)      -- grow-light timer + thermometer, right of the door
 -- SYSTEM 5  Recycling & Salvage Workshop
 M.recycle = place("shredder", 1172, 2196, 150)        -- shredder + furnace, back wall
 M.compost = place("composter", 1572, 2202, 180)       -- organic composter, right side
@@ -86,13 +88,10 @@ prop("airlock", "pressure_panel", 560, 864, 150, { solid = true })    -- gauge p
 -- Water
 prop("water", "jug_rack", 960, 192, 150, { solid = true })            -- water jug shelving
 prop("water", "plumbing_bench", 960, 562, 150, { solid = true })      -- pipe wrenches + seals
-prop("water", "water_tank", 1446, 642, 100, { solid = true })         -- main storage tanks
-prop("water", "water_tank", 1548, 642, 100, { solid = true })
 prop("water", "pipes", 1496, 82, 140, { wall = true })                -- blue + grey wall pipes
 prop("water", "workstation", 1500, 232, 128, { solid = true })        -- diagnostic terminal
 prop("water", "clipboard", 1582, 176, 40, { wall = true })            -- water quality log
 -- Food
-prop("food", "temp_panel", 2108, 1468, 86, { wall = true })           -- grow-light timer + thermometer
 prop("food", "food_lockers", 2318, 1560, 112, { wall = true })        -- pantry cabinets, upper right
 prop("food", "prep_counter", 1995, 1762, 150, { solid = true })       -- steel prep counter
 prop("food", "ration_crates", 1962, 1920, 110, { solid = true })      -- rations + seed packets

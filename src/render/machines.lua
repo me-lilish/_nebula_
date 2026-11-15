@@ -173,6 +173,22 @@ D.water = function(m, ls, t, act)
   end
 end
 
+-- two storage tanks: clean water (left) and the oxygen-line tank (right)
+D.valves = function(m, ls, t, act)
+  local w = m.w / 2
+  local levels = { ls.potableWater / 100, ls.processWater / 100 }
+  for i = 0, 1 do
+    local u = { x = m.x + i * w, y = m.y, w = w - 2, h = m.h }
+    Props.draw("water_tank", u.x, u.y, u.w, u.h)
+    local x, y, gw, gh = rel(u, 0.13, 0.35, 0.1, 0.45)
+    Theme.set(C.screen); love.graphics.rectangle("fill", x, y, gw, gh, 3, 3)
+    local lh = gh * math.max(0, math.min(1, levels[i + 1]))
+    Theme.set(i == 0 and C.water or C.oxygen); love.graphics.rectangle("fill", x, y + gh - lh, gw, lh, 3, 3)
+  end
+  Theme.circle(m.x + m.w / 2, m.y + m.h - 18, 10, C.critical, 3)
+  if act > 0 then bubbles(m.x + 10, m.y + 30, m.w - 20, m.h - 50, t, 8, C.white, 1.5) end
+end
+
 ------------------------------------------------------------------------------
 -- 4 Food
 ------------------------------------------------------------------------------
@@ -200,6 +216,15 @@ D.greenhouse = function(m, ls, t, act)
     g.setFont(Theme.font(13)); Theme.set(C.ink); g.printf("RIPE!", x - 32, y - 10, 68, "center")
   end
   meter(m.x + m.w * 0.1, m.y + m.h + 4, m.w * 0.55, grow, C.plant)
+end
+
+D.growlight = function(m, ls, t, act)
+  sprite(m)
+  local g = love.graphics
+  g.setBlendMode("add")
+  Theme.set(Theme.hex("#FF5FD2"), 0.12 + 0.1 * math.sin(t * 2) + 0.4 * act)
+  g.rectangle("fill", m.x + 4, m.y + 4, m.w - 8, m.h - 8, 6, 6)
+  g.setBlendMode("alpha")
 end
 
 D.foodstorage = function(m, ls, t, act)

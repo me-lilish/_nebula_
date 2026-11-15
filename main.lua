@@ -28,7 +28,7 @@ local function toVirtual(x, y)
 end
 
 local function startGame()
-  room = room or RoomScene.new({ campaign = true })
+  room = room or RoomScene.new({ campaign = true, puzzles = true })
   room:reset()
   mode = "game"
 end
@@ -69,7 +69,7 @@ end
 
 function love.draw()
   if mode == "debug" then scene:draw() return end
-  love.graphics.setCanvas(canvas)
+  love.graphics.setCanvas({ canvas, stencil = true })
   love.graphics.clear(0, 0, 0, 1)
   if mode == "menu" then menu:draw() else room:draw() end
   love.graphics.setCanvas()
@@ -84,13 +84,25 @@ function love.keypressed(key)
   if key == "m" then audio:toggleMute() return end
   if mode == "menu" then
     menu:keypressed(key)
-  elseif key == "escape" then
+  elseif key == "escape" and not room.puzzles:isOpen() then
     audio:play("sfx_click")
     menu.state = "menu"
     mode = "menu"
   else
     room:keypressed(key)
   end
+end
+
+function love.mousereleased(x, y, button)
+  if mode ~= "game" then return end
+  local vx, vy = toVirtual(x, y)
+  room:mousereleased(vx, vy, button)
+end
+
+function love.mousemoved(x, y)
+  if mode ~= "game" then return end
+  local vx, vy = toVirtual(x, y)
+  room:mousemoved(vx, vy)
 end
 
 function love.mousepressed(x, y, button)

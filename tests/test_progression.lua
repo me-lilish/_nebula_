@@ -85,11 +85,15 @@ test("full play-through: every level unlocks and the mission is completed", func
   use(r, "dustoff"); eq(r.dust.suitDust, 0)
   r.vulcan.x, r.vulcan.y = Room.ENTRANCE_X - 60, (Map.ENTRANCE_Y1 + Map.ENTRANCE_Y2) / 2
   walk(r, "right", 30)
-  eq(r.mission.level, 3); eq(r.dust.cabinDust, 0)
+  eq(r.dust.cabinDust, 0); eq(objective(r), "trace")
+  eq(use(r, "trace"), "Fresh HEPA filter locked in - the cabin air is clean!")
+  eq(r.mission.level, 3)
   -- 3 WATER
   eq(use(r, "water"), "Three steps complete: clean water is ready!")
+  eq(use(r, "valves"), "Tanks balanced: 20 litres sent to the Oxygen Generator line.")
   eq(r.mission.level, 4)
-  -- 4 FOOD: the first crops are ripe
+  -- 4 FOOD: tune the lights, then the first crops are ripe
+  eq(use(r, "growlight"), "Perfect light recipe: the plants shot up!")
   eq(use(r, "greenhouse"), "Harvest time! Crops and plant scraps collected.")
   eq(use(r, "foodstorage"), "Crops packed into the Food Cooler.")
   eq(r.mission.level, 5)
@@ -142,6 +146,24 @@ test("exhaustion slows Vulcan down", function()
   r.human.isFatigued = function() return true end
   x0 = r.vulcan.x; walk(r, "left", 10); local tired = x0 - r.vulcan.x
   T.near(tired, normal * Room.TIRED_SPEED, 1e-6)
+end)
+
+test("Shift sprints; legs only move when Vulcan really moves", function()
+  local r = newCampaign()
+  local Vulcan = require("src.vulcan")
+  local x0 = r.vulcan.x; walk(r, "left", 10); local walked = x0 - r.vulcan.x
+  held.lshift = true
+  x0 = r.vulcan.x; walk(r, "left", 10); local sprinted = x0 - r.vulcan.x
+  held.lshift = false
+  T.near(sprinted, walked * Vulcan.SPRINT, 1e-6)
+  -- push into the quarters' left wall: no walking animation, no "moving"
+  walk(r, "left", 120)
+  eq(r.vulcan.moving, false); eq(r.vulcan.anim, 0)
+  -- tired astronauts cannot sprint
+  r.human.isFatigued = function() return true end
+  r.vulcan.x = 2100
+  held.lshift = true; x0 = r.vulcan.x; walk(r, "left", 10); held.lshift = false
+  T.near(x0 - r.vulcan.x, walked * Room.TIRED_SPEED, 1e-6)
 end)
 
 test("sandbox mode still opens everything", function()
