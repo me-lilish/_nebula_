@@ -11,7 +11,7 @@
   src/render/machines.lua, furniture = src/render/props.lua, HUD = src/ui/hud.lua.
 
   Controls: arrows / WASD walk, left-click (or E) a station when close,
-            Tab tablet, R restart, Esc back to the menu (main.lua).
+            Tab tablet, M mute sound, R restart, Esc back to the menu (main.lua).
 
   The logic part (movement, range, clicks, messages, camera, progression)
   needs no love.* calls, so tests can run it with plain Lua.
@@ -407,6 +407,7 @@ function Room:reset()
   self.unlockCard = nil
   self.showTablet, self.missionComplete = false, false
   self.message, self.messageTimer = nil, 0
+  self.sounds = {}       -- sound names for src/audio.lua to play this frame
   for _, m in ipairs(self.machines) do m.act = 0 end
   if self.fx then self.fx = require("src.render.fx").new() end -- clear old effects
   self:_refreshGuide()
@@ -458,6 +459,7 @@ function Room:_onUnlock(level)
   end
   ls:_afterAction()
   self.unlockCard = { level = level, index = self.mission.level, timer = 6 }
+  self:_sound("sfx_unlock")
   self.news, self.newsTimer = string.format("LEVEL %d UNLOCKED: %s - %s", self.mission.level, level.name, level.room), Room.NEWS_SECONDS
 end
 
@@ -569,6 +571,11 @@ function Room:worldToScreen(wx, wy) return wx - self.camX, wy - self.camY end
 -- Update / input
 ------------------------------------------------------------------------------
 
+-- Queue a one-shot sound (played by src/audio.lua; ignored in tests)
+function Room:_sound(name)
+  if #self.sounds < 8 then self.sounds[#self.sounds + 1] = name end
+end
+
 function Room:say(text)
   self.message, self.messageTimer = text, Room.MESSAGE_SECONDS
 end
@@ -648,6 +655,7 @@ function Room:update(dt)
     local nowOut = Map.isOutside(v.x, v.y)
     if nowOut ~= self.outside then
       self.outside, self.fade = nowOut, 1
+      self:_sound("sfx_door")
       if nowOut then
         self.dust:goOutside()
         self.dust:collectSuitDust(20)
@@ -713,15 +721,19 @@ function Room:mousepressed(sx, sy, button)
   if not m then return nil end
   if self:isOver() then
     self:say(Room.TEXT.missionOver)
+    self:_sound("sfx_error")
   elseif self:isRoomLocked(m.room) then
+    self:_sound("sfx_error")
     local n = self.mission:levelOf(m.room)
     self:say(string.format("Locked! This opens at Level %d.", n or 0))
   elseif not self:isNear(m) then
     self:say(Room.TEXT.tooFar)
+    self:_sound("sfx_error")
   else
     local ok, reason, extra = m.run(self.ls)
     if ok then
       self:say(type(m.success) == "function" and m.success(extra) or m.success)
+      self:_sound("sfx_ok")
       m.act = 1
       if m.fx then
         self:_effect(m.fx[1], m.x + m.w / 2, m.y + m.h / 3, 16)
@@ -733,6 +745,7 @@ function Room:mousepressed(sx, sy, button)
       local text = m.problems[reason] or "That station can't help right now."
       if reason == "cooldown" then text = string.format(text, math.ceil(self.ls.co2CleanerCooldown)) end
       self:say(text)
+      self:_sound("sfx_error")
     end
   end
   self:_checkAutoTasks()

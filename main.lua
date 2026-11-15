@@ -9,10 +9,11 @@
 local RoomScene = require("src.room_scene")
 local DebugScene = require("src.debug_scene")
 local Menu = require("src.menu_scene")
+local Audio = require("src.audio")
 
 local VW, VH = 1280, 720
 local canvas
-local scene, menu, room
+local scene, menu, room, audio
 local mode = "menu" -- "menu" | "game" | "debug"
 
 local function viewTransform()
@@ -49,6 +50,7 @@ function love.load(args)
   if ok then love.window.setIcon(icon) end
   canvas = love.graphics.newCanvas(VW, VH)
   menu = Menu.new(startGame, function() love.event.quit() end)
+  audio = Audio.new()
 end
 
 function love.update(dt)
@@ -56,8 +58,11 @@ function love.update(dt)
   if mode == "debug" then scene:update(dt) return end
   if mode == "menu" then
     menu:update(dt, toVirtual(love.mouse.getPosition()))
+    audio:updateMusic(dt, "ambient")
+    audio:silenceWorld(dt)
   else
     room:update(dt)
+    audio:update(dt, room)
   end
 end
 
@@ -75,6 +80,7 @@ end
 
 function love.keypressed(key)
   if mode == "debug" then scene:keypressed(key) return end
+  if key == "m" then audio:toggleMute() return end
   if mode == "menu" then
     menu:keypressed(key)
   elseif key == "escape" then
