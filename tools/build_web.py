@@ -55,6 +55,11 @@ STYLE = """
       #start img { width: 120px; height: 120px; }
       #start button { font: 700 26px system-ui, sans-serif; padding: 16px 44px; border-radius: 16px;
         border: 4px solid #1B1830; background: #4DEBFF; color: #1B1830; }
+      #err { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30;
+        width: min(86vw, 560px); padding: 18px 20px; border-radius: 16px; background: #1B1830; border: 3px solid #FF4D5E;
+        color: #F4F6FB; font: 15px system-ui, sans-serif; text-align: center; }
+      #err b { color: #FF4D5E; font-size: 19px; } #err code { display: block; margin: 10px 0; color: #FFD84D; word-break: break-word; }
+      #err button { font: 700 17px system-ui, sans-serif; padding: 8px 22px; border-radius: 10px; border: 0; background: #4DEBFF; }
       #start small { color: #8E98B3; font-weight: 400; font-size: 15px; padding: 0 20px; }
       #rotate { display: none; position: fixed; inset: 0; z-index: 20; background: #0B0920; color: #A8F6FF;
         font: 600 24px system-ui, sans-serif; text-align: center; align-items: center; justify-content: center;
@@ -65,6 +70,8 @@ STYLE = """
 """
 
 START = """
+    <div id="err"><b>Oops! The game hit a problem.</b><code id="errmsg"></code>
+      <button onclick="location.reload()">Reload</button></div>
     <div id="rotate"><span>&#x21BB;</span>Turn your phone sideways to play</div>
     <div id="start">
       <img src="icon.png" alt="">
@@ -135,6 +142,13 @@ def restyle(path):
     s = s.replace('<link rel="stylesheet" type="text/css" href="theme/love.css">', STYLE)
     s = s.replace('width="800" height="600"', 'width="1280" height="720"')
     s = s.replace("<body>", "<body>" + START, 1)
+    # show errors on screen (instead of a silent black page) so players can
+    # report the exact message
+    s = s.replace("""      window.onerror = function(event) {""", """      window.onerror = function(event) {
+        try {
+          document.getElementById("errmsg").textContent = String(event).slice(0, 300);
+          document.getElementById("err").style.display = "block";
+        } catch (e) {}""", 1)
     # a clean, on-brand loading screen (the stock one draws at the wrong scale)
     a = s.index("function drawLoadingText(text) {")
     b = s.index("window.onload")
@@ -146,7 +160,17 @@ def restyle(path):
     s = s.replace("""      var applicationLoad = function(e) {
         Love(Module);
       }""", """      var loveReady = false, tapped = false;
-      function boot() { if (loveReady && tapped) { fitCanvas(); Love(Module); } }
+      function boot() {
+        if (!(loveReady && tapped)) return;
+        // no sound device in this browser? start the game silently instead
+        // of letting LOVE fail to open audio (see conf.lua)
+        var A = window.AudioContext || window.webkitAudioContext;
+        var audioOk = false;
+        try { if (A) { var ac = new A(); audioOk = true; if (ac.close) ac.close(); } } catch (err) {}
+        if (!audioOk) Module.arguments.push("--noaudio");
+        fitCanvas();
+        Love(Module);
+      }
       var applicationLoad = function(e) { loveReady = true; boot(); };
       document.getElementById("go").addEventListener("click", function () {
         tapped = true;

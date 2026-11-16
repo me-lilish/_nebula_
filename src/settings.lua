@@ -3,7 +3,10 @@
 local Settings = { lang = "en", tts = false, mute = false }
 local FILE = "settings.txt"
 
+-- Note: check that the file exists first. Raising (even caught) Lua errors
+-- crashes LOVE in Safari's WebAssembly engine, so avoid them on start-up.
 function Settings.load()
+  if not (love.filesystem.getInfo and love.filesystem.getInfo(FILE)) then return Settings end
   local ok, text = pcall(function() return love.filesystem.read(FILE) end)
   if not ok or not text then return Settings end
   for k, v in text:gmatch("(%w+)=(%w+)") do
