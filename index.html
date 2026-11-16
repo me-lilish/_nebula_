@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>Junior Astronaut Mission</title>
+
+    <!-- Load custom style sheet -->
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0B0920">
+    <link rel="icon" href="icon.png">
+    <style>
+      html, body { margin: 0; height: 100%; background: #0B0920; overflow: hidden; touch-action: none;
+        overscroll-behavior: none; -webkit-text-size-adjust: 100%;
+        -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none; }
+      /* the screen the player really sees (iPhone toolbars come and go);
+         fitCanvas() below does the exact fit with the visual viewport */
+      html { height: 100vh; height: 100dvh; }
+      #canvas, #loadingCanvas { touch-action: none; max-width: 100vw; max-height: 100vh; max-height: 100dvh; }
+      /* iPhone: no rubber-band scrolling that would move the game */
+      body { position: fixed; inset: 0; }
+      /* reads the screen's safe areas (notch, home bar) as pixels */
+      #safe { position: fixed; visibility: hidden; pointer-events: none; left: 0; top: 0;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      #iostip { display: none; color: #FFD84D; font-weight: 400; font-size: 15px; padding: 0 24px; max-width: 520px; }
+      center > div > h1, footer { display: none; }
+      #loadingCanvas, #canvas { position: fixed; left: 0; top: 0; display: block; }
+      #canvas { visibility: hidden; }
+      #start { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 18px; background: #0B0920; color: #A8F6FF; z-index: 10;
+        font: 600 22px system-ui, sans-serif; text-align: center; }
+      #start img { width: 120px; height: 120px; }
+      #start button { font: 700 26px system-ui, sans-serif; padding: 16px 44px; border-radius: 16px;
+        border: 4px solid #1B1830; background: #4DEBFF; color: #1B1830; }
+      #err { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30;
+        width: min(86vw, 560px); padding: 18px 20px; border-radius: 16px; background: #1B1830; border: 3px solid #FF4D5E;
+        color: #F4F6FB; font: 15px system-ui, sans-serif; text-align: center; }
+      #err b { color: #FF4D5E; font-size: 19px; } #err code { display: block; margin: 10px 0; color: #FFD84D; word-break: break-word; }
+      #err button { font: 700 17px system-ui, sans-serif; padding: 8px 22px; border-radius: 10px; border: 0; background: #4DEBFF; }
+      #saved { display: none; color: #FFD84D; font-size: 17px; }
+      #start small { color: #8E98B3; font-weight: 400; font-size: 15px; padding: 0 20px; }
+      #rotate { display: none; position: fixed; inset: 0; z-index: 20; background: #0B0920; color: #A8F6FF;
+        font: 600 24px system-ui, sans-serif; text-align: center; align-items: center; justify-content: center;
+        flex-direction: column; gap: 16px; }
+      #rotate span { font-size: 64px; }
+      @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+      /* short screens (phones held sideways): a compact start screen */
+      @media (max-height: 420px) {
+        #start { gap: 8px; font-size: 18px; }
+        #start img { width: 64px; height: 64px; }
+        #start button { font-size: 20px; padding: 10px 30px; }
+        #start small, #iostip, #saved { font-size: 12px; }
+      }
+    </style>
+
+  </head>
+  <body>
+    <div id="err"><b>Oops! The game hit a problem.</b><code id="errmsg"></code>
+      <button onclick="location.reload()">Reload</button></div>
+    <div id="rotate"><span>&#x21BB;</span>Turn your phone sideways to play</div>
+    <div id="safe"></div>
+    <div id="start">
+      <img src="icon.png" alt="">
+      <div>JUNIOR ASTRONAUT MISSION</div>
+      <div id="saved"></div>
+      <button id="go">TAP TO PLAY</button>
+      <small>Best in landscape. On a phone: left thumb moves, buttons on the right.</small>
+      <small id="iostip">iPhone tip: tap Share, then "Add to Home Screen", to play in full screen.</small>
+    </div>
+
+    <center>
+      <div>
+        <h1>Junior Astronaut Mission</h1>
+        <canvas id="loadingCanvas" oncontextmenu="event.preventDefault()" width="1280" height="720"></canvas>
+        <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+      </div>
+    </center>
+
+    <script type='text/javascript'>
+      // Fit the 16:9 game canvas as large as possible inside the part of the
+      // screen the player can really see: the visual viewport (iPhone Safari
+      // toolbars come and go) minus the safe areas (notch, home bar).
+      function safeInsets() {
+        var el = document.getElementById("safe");
+        if (!el) return { t: 0, r: 0, b: 0, l: 0 };
+        var cs = getComputedStyle(el);
+        return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0,
+                 b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+      }
+      function screenBox() {
+        var vv = window.visualViewport;
+        var w = vv ? vv.width : window.innerWidth, h = vv ? vv.height : window.innerHeight;
+        var x = vv ? vv.offsetLeft : 0, y = vv ? vv.offsetTop : 0;
+        var i = safeInsets();
+        return { x: x + i.l, y: y + i.t, w: Math.max(1, w - i.l - i.r), h: Math.max(1, h - i.t - i.b) };
+      }
+      var lastFit = "";
+      function fitCanvas() {
+        var b = screenBox();
+        var s = Math.min(b.w / 1280, b.h / 720);
+        var cw = Math.floor(1280 * s), ch = Math.floor(720 * s);
+        var left = Math.floor(b.x + (b.w - cw) / 2), top = Math.floor(b.y + (b.h - ch) / 2);
+        var key = cw + "," + ch + "," + left + "," + top;
+        ["canvas", "loadingCanvas"].forEach(function (id) {
+          var c = document.getElementById(id);
+          if (!c) return;
+          // the engine may reset the size when it starts: re-apply if changed
+          if (key === lastFit && c.style.width === cw + "px" && c.style.left === left + "px") return;
+          c.style.width = cw + "px"; c.style.height = ch + "px";
+          c.style.left = left + "px"; c.style.top = top + "px";
+        });
+        lastFit = key;
+      }
+      window.addEventListener("resize", fitCanvas);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", fitCanvas);
+        window.visualViewport.addEventListener("scroll", fitCanvas);
+      }
+      window.addEventListener("orientationchange", function () { setTimeout(fitCanvas, 300); setTimeout(fitCanvas, 900); });
+      setInterval(fitCanvas, 400);
+      // no page scrolling, pinch zoom or double-tap zoom on phones
+      document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+      ["gesturestart", "gesturechange", "gestureend"].forEach(function (n) {
+        document.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      var lastTouchEnd = 0;
+      document.addEventListener("touchend", function (e) {
+        var now = Date.now();
+        if (now - lastTouchEnd < 300 && e.target && e.target.tagName !== "BUTTON") e.preventDefault();
+        lastTouchEnd = now;
+      }, { passive: false });
+      // no long-press menu (copy / save image) on the game
+      document.addEventListener("contextmenu", function (e) {
+        if (e.target && (e.target.id === "canvas" || e.target.id === "loadingCanvas")) e.preventDefault();
+      });
+      // Saves: the game prints "@@SAVE@@name=<url-encoded text>" (src/store.lua);
+      // they are kept in localStorage and handed back to the game when it
+      // starts as "--store:name=..." arguments.
+      var SAVE_KEY = "nebula:";
+      function savedArgs() {
+        var out = [];
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(SAVE_KEY) === 0 && /^[A-Za-z0-9_]+$/.test(k.slice(SAVE_KEY.length)))
+              out.push("--store:" + k.slice(SAVE_KEY.length) + "=" + localStorage.getItem(k));
+          }
+        } catch (e) {}
+        return out;
+      }
+      function keepSave(line) {
+        var rest = line.slice(8), eq = rest.indexOf("=");
+        if (eq < 1) return;
+        try { localStorage.setItem(SAVE_KEY + rest.slice(0, eq), rest.slice(eq + 1)); } catch (e) {}
+      }
+      function savedLevel() {
+        try {
+          var text = decodeURIComponent(localStorage.getItem(SAVE_KEY + "progress") || "");
+          var m = /level=([0-9]+)/.exec(text);
+          var n = m ? Number(m[1]) : 1;
+          return n >= 2 && n <= 8 ? n : 0;
+        } catch (e) { return 0; }
+      }
+      document.addEventListener("DOMContentLoaded", function () {
+        var n = savedLevel();
+        if (n) {
+          var el = document.getElementById("saved");
+          el.textContent = "Saved game: you are on Level " + n + " of 8";
+          el.style.display = "block";
+          document.getElementById("go").textContent = "TAP TO CONTINUE";
+        }
+      });
+      // iPhone / iPad Safari cannot go full screen from a page: suggest the
+      // Home Screen (which opens the game full screen) unless already there
+      document.addEventListener("DOMContentLoaded", function () {
+        var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        var standalone = window.navigator.standalone === true ||
+          (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+        var tip = document.getElementById("iostip");
+        if (tip && ios && !standalone) tip.style.display = "block";
+      });
+
+      function goFullScreen(){
+            var canvas = document.getElementById("canvas");
+            canvas = document.documentElement;
+        if(canvas.requestFullscreen)
+            canvas.requestFullscreen();
+        else if(canvas.requestFullScreen)
+                canvas.requestFullScreen();
+            else if(canvas.webkitRequestFullScreen)
+                canvas.webkitRequestFullScreen();
+            else if(canvas.mozRequestFullScreen)
+                canvas.mozRequestFullScreen();
+      }
+      function FullScreenHook(){
+        var canvas = document.getElementById("canvas");
+        canvas.width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+        canvas.height = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+      }
+      var loadingContext = document.getElementById('loadingCanvas').getContext('2d');
+      function drawLoadingText(text) {
+        var c = loadingContext.canvas;
+        loadingContext.fillStyle = "#0B0920";
+        loadingContext.fillRect(0, 0, c.width, c.height);
+        loadingContext.textAlign = "center";
+        loadingContext.fillStyle = "#4DEBFF";
+        loadingContext.font = "bold 56px system-ui, sans-serif";
+        loadingContext.fillText("JUNIOR ASTRONAUT MISSION", c.width / 2, c.height / 2 - 40);
+        loadingContext.fillStyle = "#A8F6FF";
+        loadingContext.font = "32px system-ui, sans-serif";
+        var m = /\((\d+)\/(\d+)\)/.exec(text);
+        if (m) {
+          var f = Number(m[1]) / Math.max(1, Number(m[2]));
+          loadingContext.fillText("Loading the Moon base... " + Math.floor(f * 100) + "%", c.width / 2, c.height / 2 + 30);
+          loadingContext.fillStyle = "#2F5468"; loadingContext.fillRect(c.width / 2 - 300, c.height / 2 + 70, 600, 22);
+          loadingContext.fillStyle = "#5BE37D"; loadingContext.fillRect(c.width / 2 - 300, c.height / 2 + 70, 600 * f, 22);
+        } else {
+          loadingContext.fillText(text, c.width / 2, c.height / 2 + 30);
+        }
+      }
+
+      window.onload = function () { window.focus(); };
+      window.onclick = function () { window.focus(); };
+
+      window.addEventListener("keydown", function(e) {
+        // space and arrow keys
+        if([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+          e.preventDefault();
+        }
+      }, false);
+
+      var Module = {
+        arguments: ["./game.love"],
+        INITIAL_MEMORY: 134217728,
+        printErr: console.error.bind(console),
+        print: function (text) {
+          if (text.indexOf("@@SAVE@@") === 0) { keepSave(text); return; }
+          var q = text.indexOf("@@TTSQ@@") === 0, n = text.indexOf("@@TTS@@") === 0;
+          if ((q || n) && window.speechSynthesis) {
+            var u = new SpeechSynthesisUtterance(text.slice(q ? 8 : 7));
+            u.lang = "en-US"; u.rate = 0.95;
+            if (n) window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+          } else { console.log(text); }
+        },
+        canvas: (function() {
+          var canvas = document.getElementById('canvas');
+
+          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
+          // application robust, you may want to override this behavior before shipping!
+          // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
+          canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+
+          return canvas;
+        })(),
+        setStatus: function(text) {
+          if (text) {
+            drawLoadingText(text);
+          } else if (Module.remainingDependencies === 0) {
+            document.getElementById('loadingCanvas').style.display = 'none';
+            document.getElementById('canvas').style.visibility = 'visible';
+          }
+        },
+        totalDependencies: 0,
+        remainingDependencies: 0,
+        monitorRunDependencies: function(left) {
+          this.remainingDependencies = left;
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        }
+      };
+      Module.setStatus('Downloading...');
+      window.onerror = function(event) {
+        try {
+          document.getElementById("errmsg").textContent = String(event).slice(0, 300);
+          document.getElementById("err").style.display = "block";
+        } catch (e) {}
+        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+        Module.setStatus('Exception thrown, see JavaScript console');
+        Module.setStatus = function(text) {
+          if (text) Module.printErr('[post-exception status] ' + text);
+        };
+      };
+
+      var loveReady = false, tapped = false;
+      function boot() {
+        if (!(loveReady && tapped)) return;
+        // no sound device in this browser? start the game silently instead
+        // of letting LOVE fail to open audio (see conf.lua)
+        var A = window.AudioContext || window.webkitAudioContext;
+        var audioOk = false;
+        try { if (A) { var ac = new A(); audioOk = true; if (ac.close) ac.close(); } } catch (err) {}
+        if (!audioOk) Module.arguments.push("--noaudio");
+        // saved progress + settings from localStorage (after the game file
+        // argument, so LOVE never takes one of them for the game)
+        Module.arguments = Module.arguments.concat(savedArgs());
+        fitCanvas();
+        Love(Module);
+      }
+      var applicationLoad = function(e) { loveReady = true; boot(); };
+      document.getElementById("go").addEventListener("click", function () {
+        tapped = true;
+        document.getElementById("start").style.display = "none";
+        try { goFullScreen(); } catch (err) {}
+        boot();
+      });
+    </script>
+    <script type="text/javascript" src="game.js"></script>
+    <script async type="text/javascript" src="love.js" onload="applicationLoad(this)"></script>
+    <footer>
+      <p>Built with <a href="https://github.com/Davidobot/love.js">love.js</a> <button onclick="goFullScreen();">Go Fullscreen</button><br>Hint: Reload the page if screen is blank</p>
+    </footer>
+  </body>
+</html>
