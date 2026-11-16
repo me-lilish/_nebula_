@@ -42,21 +42,62 @@ function Menu.new(onStart, onQuit)
     { id = "tts", label = "READ ALOUD: %s", x = 654, y = 640, w = 330, h = 44 },
   }
   self.speaker = { x = 1040, y = 120, r = 30 }
-  -- stars, kept away from the title and the buttons
-  local rng = love.math.newRandomGenerator(42)
-  self.stars = {}
-  local tries = 0
-  while #self.stars < 70 and tries < 4000 do
+  self.stars = Menu.placeStars(42, 64)
+  return self
+end
+
+------------------------------------------------------------------------------
+-- Star placement (pure, testable): evenly spread twinkling stars that never
+-- sit on text, buttons, the Earth or the Moon.
+------------------------------------------------------------------------------
+-- rectangles (x0, y0, x1, y1) and circles (cx, cy, r) kept free of stars
+Menu.STAR_KEEP_OUT = {
+  rects = {
+    { 290, 30, 990, 312 },   -- SPACE MISSION title + subtitle
+    { 400, 400, 880, 632 },  -- Start / Abort buttons
+    { 270, 626, 1010, 720 }, -- language + read-aloud buttons and the footer
+  },
+  circles = {
+    { -150, 420, 300 },      -- the Earth (left)
+    { W + 60, H + 40, 350 }, -- the Moon (bottom right)
+  },
+}
+Menu.STAR_SPACING = 64     -- no two stars closer than this
+Menu.STAR_MARGIN = 26      -- keep away from the screen edges
+
+function Menu.starAllowed(x, y, r)
+  local k = Menu.STAR_KEEP_OUT
+  if x < Menu.STAR_MARGIN or x > W - Menu.STAR_MARGIN or y < Menu.STAR_MARGIN or y > H - Menu.STAR_MARGIN then return false end
+  for _, b in ipairs(k.rects) do
+    if x + r > b[1] and x - r < b[3] and y + r > b[2] and y - r < b[4] then return false end
+  end
+  for _, c in ipairs(k.circles) do
+    if (x - c[1]) ^ 2 + (y - c[2]) ^ 2 < (c[3] + r) ^ 2 then return false end
+  end
+  return true
+end
+
+-- deterministic (same sky every time), no love.* needed
+function Menu.placeStars(seed, count)
+  local state = seed
+  local function rnd() state = (state * 1103515245 + 12345) % 2147483648; return state / 2147483648 end
+  local stars, tries = {}, 0
+  while #stars < count and tries < 20000 do
     tries = tries + 1
-    local x, y = rng:random(20, W - 20), rng:random(15, H - 15)
-    local hitTitle = x > 290 and x < 990 and y > 20 and y < 290
-    local hitButtons = x > 400 and x < 880 and y > 410 and y < 630
-    if not hitTitle and not hitButtons then
-      self.stars[#self.stars + 1] = { x = x, y = y, s = rng:random(10, 22), frame = rng:random(1, 7),
-        timer = rng:random() * 0.5, speed = 0.08 + rng:random() * 0.12 }
+    local size = 10 + math.floor(rnd() * 13)
+    local x, y = 20 + rnd() * (W - 40), 15 + rnd() * (H - 30)
+    if Menu.starAllowed(x, y, size / 2 + 4) then
+      local ok = true
+      for _, o in ipairs(stars) do
+        if (o.x - x) ^ 2 + (o.y - y) ^ 2 < Menu.STAR_SPACING ^ 2 then ok = false; break end
+      end
+      if ok then
+        stars[#stars + 1] = { x = math.floor(x + 0.5), y = math.floor(y + 0.5), s = size,
+          frame = 1 + math.floor(rnd() * 7), timer = rnd() * 0.5, speed = 0.08 + rnd() * 0.12 }
+      end
     end
   end
-  return self
+  return stars
 end
 
 Menu.INTRO = "Welcome to the Moon base, Vulcan! Keep the habitat alive: every machine is connected, just like on a real space station."

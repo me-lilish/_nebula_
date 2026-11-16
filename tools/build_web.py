@@ -45,7 +45,14 @@ STYLE = """
     <link rel="icon" href="icon.png">
     <style>
       html, body { margin: 0; height: 100%; background: #0B0920; overflow: hidden; touch-action: none;
+        overscroll-behavior: none; -webkit-text-size-adjust: 100%;
         -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+      /* iPhone: no rubber-band scrolling that would move the game */
+      body { position: fixed; inset: 0; }
+      /* reads the screen's safe areas (notch, home bar) as pixels */
+      #safe { position: fixed; visibility: hidden; pointer-events: none; left: 0; top: 0;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      #iostip { display: none; color: #FFD84D; font-weight: 400; font-size: 15px; padding: 0 24px; max-width: 520px; }
       center > div > h1, footer { display: none; }
       #loadingCanvas, #canvas { position: fixed; left: 0; top: 0; display: block; }
       #canvas { visibility: hidden; }
@@ -66,6 +73,13 @@ STYLE = """
         flex-direction: column; gap: 16px; }
       #rotate span { font-size: 64px; }
       @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+      /* short screens (phones held sideways): a compact start screen */
+      @media (max-height: 420px) {
+        #start { gap: 8px; font-size: 18px; }
+        #start img { width: 64px; height: 64px; }
+        #start button { font-size: 20px; padding: 10px 30px; }
+        #start small, #iostip { font-size: 12px; }
+      }
     </style>
 """
 
@@ -73,32 +87,79 @@ START = """
     <div id="err"><b>Oops! The game hit a problem.</b><code id="errmsg"></code>
       <button onclick="location.reload()">Reload</button></div>
     <div id="rotate"><span>&#x21BB;</span>Turn your phone sideways to play</div>
+    <div id="safe"></div>
     <div id="start">
       <img src="icon.png" alt="">
       <div>JUNIOR ASTRONAUT MISSION</div>
       <button id="go">TAP TO PLAY</button>
       <small>Best in landscape. On a phone: left thumb moves, buttons on the right.</small>
+      <small id="iostip">iPhone tip: tap Share, then "Add to Home Screen", to play in full screen.</small>
     </div>
 """
 
 FIT = """
-      // keep the 16:9 game canvas as big as possible, centred (letterbox)
+      // Fit the 16:9 game canvas as large as possible inside the part of the
+      // screen the player can really see: the visual viewport (iPhone Safari
+      // toolbars come and go) minus the safe areas (notch, home bar).
+      function safeInsets() {
+        var el = document.getElementById("safe");
+        if (!el) return { t: 0, r: 0, b: 0, l: 0 };
+        var cs = getComputedStyle(el);
+        return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0,
+                 b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+      }
+      function screenBox() {
+        var vv = window.visualViewport;
+        var w = vv ? vv.width : window.innerWidth, h = vv ? vv.height : window.innerHeight;
+        var x = vv ? vv.offsetLeft : 0, y = vv ? vv.offsetTop : 0;
+        var i = safeInsets();
+        return { x: x + i.l, y: y + i.t, w: Math.max(1, w - i.l - i.r), h: Math.max(1, h - i.t - i.b) };
+      }
+      var lastFit = "";
       function fitCanvas() {
-        var w = window.innerWidth, h = window.innerHeight;
-        var s = Math.min(w / 1280, h / 720);
+        var b = screenBox();
+        var s = Math.min(b.w / 1280, b.h / 720);
+        var cw = Math.floor(1280 * s), ch = Math.floor(720 * s);
+        var left = Math.floor(b.x + (b.w - cw) / 2), top = Math.floor(b.y + (b.h - ch) / 2);
+        var key = cw + "," + ch + "," + left + "," + top;
         ["canvas", "loadingCanvas"].forEach(function (id) {
           var c = document.getElementById(id);
-          c.style.width = Math.floor(1280 * s) + "px";
-          c.style.height = Math.floor(720 * s) + "px";
-          c.style.left = Math.floor((w - 1280 * s) / 2) + "px";
-          c.style.top = Math.floor((h - 720 * s) / 2) + "px";
+          if (!c) return;
+          // the engine may reset the size when it starts: re-apply if changed
+          if (key === lastFit && c.style.width === cw + "px" && c.style.left === left + "px") return;
+          c.style.width = cw + "px"; c.style.height = ch + "px";
+          c.style.left = left + "px"; c.style.top = top + "px";
         });
+        lastFit = key;
       }
       window.addEventListener("resize", fitCanvas);
-      // the engine resets the canvas size when it starts: keep re-fitting
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", fitCanvas);
+        window.visualViewport.addEventListener("scroll", fitCanvas);
+      }
+      window.addEventListener("orientationchange", function () { setTimeout(fitCanvas, 300); setTimeout(fitCanvas, 900); });
       setInterval(fitCanvas, 400);
-      window.addEventListener("orientationchange", function () { setTimeout(fitCanvas, 300); });
+      // no page scrolling, pinch zoom or double-tap zoom on phones
       document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+      ["gesturestart", "gesturechange", "gestureend"].forEach(function (n) {
+        document.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      var lastTouchEnd = 0;
+      document.addEventListener("touchend", function (e) {
+        var now = Date.now();
+        if (now - lastTouchEnd < 300 && e.target && e.target.tagName !== "BUTTON") e.preventDefault();
+        lastTouchEnd = now;
+      }, { passive: false });
+      // iPhone / iPad Safari cannot go full screen from a page: suggest the
+      // Home Screen (which opens the game full screen) unless already there
+      document.addEventListener("DOMContentLoaded", function () {
+        var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        var standalone = window.navigator.standalone === true ||
+          (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+        var tip = document.getElementById("iostip");
+        if (tip && ios && !standalone) tip.style.display = "block";
+      });
 """
 
 
@@ -141,6 +202,10 @@ def restyle(path):
     s = open(path, encoding="utf-8").read()
     s = s.replace('<link rel="stylesheet" type="text/css" href="theme/love.css">', STYLE)
     s = s.replace('width="800" height="600"', 'width="1280" height="720"')
+    # iPhone: draw into the whole screen (notch areas handled by fitCanvas)
+    # and do not let the page zoom
+    s = s.replace('shrink-to-fit=no, minimum-scale=1, maximum-scale=1"',
+                  'shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"', 1)
     s = s.replace("<body>", "<body>" + START, 1)
     # show errors on screen (instead of a silent black page) so players can
     # report the exact message
