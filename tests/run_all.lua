@@ -15,6 +15,7 @@ local files = {
   "tests/test_touch.lua",
   "tests/test_i18n.lua",
   "tests/test_menu.lua",
+  "tests/test_save.lua",
   "tests/test_walkthrough.lua",
 }
 -- Use the same Lua that is running this script.

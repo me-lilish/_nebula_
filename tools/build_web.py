@@ -46,7 +46,12 @@ STYLE = """
     <style>
       html, body { margin: 0; height: 100%; background: #0B0920; overflow: hidden; touch-action: none;
         overscroll-behavior: none; -webkit-text-size-adjust: 100%;
-        -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none; }
+      /* the screen the player really sees (iPhone toolbars come and go);
+         fitCanvas() below does the exact fit with the visual viewport */
+      html { height: 100vh; height: 100dvh; }
+      #canvas, #loadingCanvas { touch-action: none; max-width: 100vw; max-height: 100vh; max-height: 100dvh; }
       /* iPhone: no rubber-band scrolling that would move the game */
       body { position: fixed; inset: 0; }
       /* reads the screen's safe areas (notch, home bar) as pixels */
@@ -67,6 +72,7 @@ STYLE = """
         color: #F4F6FB; font: 15px system-ui, sans-serif; text-align: center; }
       #err b { color: #FF4D5E; font-size: 19px; } #err code { display: block; margin: 10px 0; color: #FFD84D; word-break: break-word; }
       #err button { font: 700 17px system-ui, sans-serif; padding: 8px 22px; border-radius: 10px; border: 0; background: #4DEBFF; }
+      #saved { display: none; color: #FFD84D; font-size: 17px; }
       #start small { color: #8E98B3; font-weight: 400; font-size: 15px; padding: 0 20px; }
       #rotate { display: none; position: fixed; inset: 0; z-index: 20; background: #0B0920; color: #A8F6FF;
         font: 600 24px system-ui, sans-serif; text-align: center; align-items: center; justify-content: center;
@@ -78,7 +84,7 @@ STYLE = """
         #start { gap: 8px; font-size: 18px; }
         #start img { width: 64px; height: 64px; }
         #start button { font-size: 20px; padding: 10px 30px; }
-        #start small, #iostip { font-size: 12px; }
+        #start small, #iostip, #saved { font-size: 12px; }
       }
     </style>
 """
@@ -91,6 +97,7 @@ START = """
     <div id="start">
       <img src="icon.png" alt="">
       <div>JUNIOR ASTRONAUT MISSION</div>
+      <div id="saved"></div>
       <button id="go">TAP TO PLAY</button>
       <small>Best in landscape. On a phone: left thumb moves, buttons on the right.</small>
       <small id="iostip">iPhone tip: tap Share, then "Add to Home Screen", to play in full screen.</small>
@@ -150,6 +157,47 @@ FIT = """
         if (now - lastTouchEnd < 300 && e.target && e.target.tagName !== "BUTTON") e.preventDefault();
         lastTouchEnd = now;
       }, { passive: false });
+      // no long-press menu (copy / save image) on the game
+      document.addEventListener("contextmenu", function (e) {
+        if (e.target && (e.target.id === "canvas" || e.target.id === "loadingCanvas")) e.preventDefault();
+      });
+      // Saves: the game prints "@@SAVE@@name=<url-encoded text>" (src/store.lua);
+      // they are kept in localStorage and handed back to the game when it
+      // starts as "--store:name=..." arguments.
+      var SAVE_KEY = "nebula:";
+      function savedArgs() {
+        var out = [];
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(SAVE_KEY) === 0 && /^[A-Za-z0-9_]+$/.test(k.slice(SAVE_KEY.length)))
+              out.push("--store:" + k.slice(SAVE_KEY.length) + "=" + localStorage.getItem(k));
+          }
+        } catch (e) {}
+        return out;
+      }
+      function keepSave(line) {
+        var rest = line.slice(8), eq = rest.indexOf("=");
+        if (eq < 1) return;
+        try { localStorage.setItem(SAVE_KEY + rest.slice(0, eq), rest.slice(eq + 1)); } catch (e) {}
+      }
+      function savedLevel() {
+        try {
+          var text = decodeURIComponent(localStorage.getItem(SAVE_KEY + "progress") || "");
+          var m = /level=([0-9]+)/.exec(text);
+          var n = m ? Number(m[1]) : 1;
+          return n >= 2 && n <= 8 ? n : 0;
+        } catch (e) { return 0; }
+      }
+      document.addEventListener("DOMContentLoaded", function () {
+        var n = savedLevel();
+        if (n) {
+          var el = document.getElementById("saved");
+          el.textContent = "Saved game: you are on Level " + n + " of 8";
+          el.style.display = "block";
+          document.getElementById("go").textContent = "TAP TO CONTINUE";
+        }
+      });
       // iPhone / iPad Safari cannot go full screen from a page: suggest the
       // Home Screen (which opens the game full screen) unless already there
       document.addEventListener("DOMContentLoaded", function () {
@@ -188,6 +236,7 @@ LOADING = """function drawLoadingText(text) {
 
 SPEECH = """printErr: console.error.bind(console),
         print: function (text) {
+          if (text.indexOf("@@SAVE@@") === 0) { keepSave(text); return; }
           var q = text.indexOf("@@TTSQ@@") === 0, n = text.indexOf("@@TTS@@") === 0;
           if ((q || n) && window.speechSynthesis) {
             var u = new SpeechSynthesisUtterance(text.slice(q ? 8 : 7));
@@ -233,6 +282,9 @@ def restyle(path):
         var audioOk = false;
         try { if (A) { var ac = new A(); audioOk = true; if (ac.close) ac.close(); } } catch (err) {}
         if (!audioOk) Module.arguments.push("--noaudio");
+        // saved progress + settings from localStorage (after the game file
+        // argument, so LOVE never takes one of them for the game)
+        Module.arguments = Module.arguments.concat(savedArgs());
         fitCanvas();
         Love(Module);
       }

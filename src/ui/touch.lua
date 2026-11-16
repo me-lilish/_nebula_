@@ -18,18 +18,24 @@ Touch.__index = Touch
 Touch.STICK_RADIUS = 80
 Touch.DEAD = 0.35            -- stick push needed before walking
 Touch.RUN_PUSH = 0.97        -- pushed all the way = run
+-- r = drawn size, hit = touch area. Sized for thumbs: the smallest phone
+-- (iPhone SE in Safari, 568 x 320 points) shows the game at 0.44, so a
+-- 96 px wide target is about 43 points (Apple asks for 44).
 Touch.BUTTONS = {
-  { id = "use", label = "USE", x = 1176, y = 586, r = 64 },
-  { id = "run", label = "RUN", x = 1046, y = 640, r = 46 },
-  { id = "tab", label = "TABLET", x = 1052, y = 520, r = 38 },
+  { id = "use", label = "USE", x = 1176, y = 586, r = 64, hit = 64 },
+  { id = "run", label = "RUN", x = 1046, y = 640, r = 48, hit = 50 },
+  { id = "tab", label = "TABLET", x = 1050, y = 512, r = 44, hit = 48 },
 }
-Touch.CLOSE = { x = 1138, y = 92, r = 34 } -- leave a mini-game
+Touch.CLOSE = { x = 1138, y = 92, r = 34, hit = 46 } -- leave a mini-game
 
 function Touch.new()
   return setmetatable({ enabled = false, stick = nil, held = {} }, Touch)
 end
 
-local function hit(b, x, y) return (x - b.x) ^ 2 + (y - b.y) ^ 2 <= b.r * b.r end
+local function hit(b, x, y)
+  local r = b.hit or b.r
+  return (x - b.x) ^ 2 + (y - b.y) ^ 2 <= r * r
+end
 Touch.hit = hit
 
 function Touch:buttonAt(x, y)

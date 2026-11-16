@@ -6,6 +6,8 @@
 -- The game draws to a fixed 1280 x 720 virtual screen that is scaled to fit
 -- any window size (the window is resizable).
 -- In the game: Esc or P = pause menu (language, read aloud, sound, restart).
+-- Progress (the level reached) and settings are saved automatically
+-- (src/progress.lua, src/settings.lua; in a browser also in localStorage).
 
 local RoomScene = require("src.room_scene")
 local DebugScene = require("src.debug_scene")
@@ -17,6 +19,8 @@ local TTS = require("src.tts")
 local Settings = require("src.settings")
 local PauseMenu = require("src.pause_menu")
 local HUD = require("src.ui.hud")
+local Store = require("src.store")
+local Progress = require("src.progress")
 
 local VW, VH = 1280, 720
 local canvas
@@ -37,10 +41,20 @@ local function toVirtual(x, y)
   return (x - ox) / s, (y - oy) / s
 end
 
+-- auto-save: a new level unlocked, or the whole mission finished
+local function onProgress(kind, value)
+  if kind == "level" then Progress.reachLevel(value)
+  elseif kind == "complete" then Progress.finish(value) end
+end
+
+-- continues from the saved level (Level 1 for a new game)
 local function startGame()
-  room = room or RoomScene.new({ campaign = true, puzzles = true,
-    isDown = function(k) return not paused and (love.keyboard.isDown(k) or touch:isDown(k)) end })
-  room:reset()
+  if not room then
+    room = RoomScene.new({ campaign = true, puzzles = true,
+      isDown = function(k) return not paused and (love.keyboard.isDown(k) or touch:isDown(k)) end })
+    room.onProgress = onProgress
+  end
+  room:reset(Progress.level)
   mode = "game"
   paused = false
 end
@@ -89,7 +103,7 @@ end
 local function openPause()
   paused = true
   touch.stick = nil
-  pause.selected = 1
+  pause:open()
   audio:play("sfx_click")
 end
 
@@ -120,6 +134,16 @@ function love.load(args)
   audio = Audio.new()
   menu.sound = function(name) audio:play(name) end
 
+  -- saved settings and progress (the web page hands over its localStorage
+  -- copies as start-up arguments, see src/store.lua)
+  local startArgs = {}
+  for _, list in ipairs({ args or {}, arg or {} }) do
+    for _, a in ipairs(list) do startArgs[#startArgs + 1] = a end
+  end
+  Store.init(startArgs)
+  Progress.load()
+  menu.savedLevel = function() return Progress.hasSave() and Progress.level or nil end
+
   -- languages, read aloud, settings, pause menu
   I18n.install()
   Settings.load()
@@ -135,7 +159,8 @@ function love.load(args)
     language = nextLanguage,
     tts = toggleReadAloud,
     sound = toggleSound,
-    restart = function() room:reset(); paused = false end,
+    restart = function() room:reset(room:checkpoint()); paused = false end,
+    startover = function() Progress.startOver(); room:reset(1); paused = false end,
     menu = function() paused = false; menu.state = "menu"; mode = "menu" end,
     value = settingValue,
     disabled = function(id) return id == "tts" and TTS.blocked end,

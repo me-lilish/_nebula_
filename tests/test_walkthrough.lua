@@ -85,9 +85,9 @@ local function nearGoal(room, m)
   end
 end
 
-test("a walking bot finishes the whole campaign", function()
-  release()
-  local r = Room.new({ isDown = isDown, campaign = true, puzzles = true })
+-- plays the campaign from wherever `r` is to MISSION COMPLETE; returns the
+-- number of mini-games played
+local function playToEnd(r)
   local puzzles = 0
   local log = {}
   local guard = 0
@@ -127,7 +127,32 @@ test("a walking bot finishes the whole campaign", function()
   end
   eq(r.missionComplete, true)
   eq(r.ls.missionFailed, false)
+  return puzzles
+end
+
+test("a walking bot finishes the whole campaign", function()
+  release()
+  local r = Room.new({ isDown = isDown, campaign = true, puzzles = true })
+  local saved = {}
+  r.onProgress = function(kind, v) saved[#saved + 1] = kind .. ":" .. tostring(v) end
+  local puzzles = playToEnd(r)
   assert(puzzles >= 17, "every mini-game was played (" .. puzzles .. ")")
+  -- auto-save: once per new level, then once for the finished mission
+  eq(table.concat(saved, ",", 1, 7), "level:2,level:3,level:4,level:5,level:6,level:7,level:8")
+  assert(saved[8]:match("^complete:[123]$"), tostring(saved[8]))
+  eq(#saved, 8)
+end)
+
+test("a saved game continues from every level and can still be finished", function()
+  for level = 2, 8 do
+    release()
+    local r = Room.new({ isDown = isDown, campaign = true, puzzles = true })
+    r:reset(level)
+    eq(r.mission.level, level)
+    eq(r.mission:objective().id, require("src.mission_state").LEVELS[level].tasks[1].id)
+    local ok, err = pcall(playToEnd, r)
+    if not ok then error("continuing from level " .. level .. ": " .. tostring(err)) end
+  end
 end)
 
 test("every machine and the outer door can be reached on foot (sandbox)", function()

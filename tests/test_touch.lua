@@ -31,4 +31,40 @@ test("two fingers: walk with one, press RUN with the other", function()
   eq(t:press(3, 200, 500), nil, "only one stick at a time")
 end)
 
+test("touch targets are thumb-sized on the smallest phone and never overlap", function()
+  local HUD = require("src.ui.hud")
+  local Room = require("src.room_scene")
+  -- iPhone SE landscape in Safari: 568 x 320 points -> the game at 0.44
+  local scale = math.min(568 / 1280, 320 / 720)
+  local targets = {
+    { "pause", HUD.PAUSE.x, HUD.PAUSE.y, HUD.PAUSE.hit },
+    { "speaker", Room.SPEAKER.x, Room.SPEAKER.y, Room.SPEAKER.hit },
+  }
+  for _, b in ipairs(Touch.BUTTONS) do targets[#targets + 1] = { b.id, b.x, b.y, b.hit or b.r } end
+  for _, t in ipairs(targets) do
+    local pts = 2 * t[4] * scale
+    -- the speaker sits in the top bar, so it gets a little less
+    assert(pts >= (t[1] == "speaker" and 31 or 40), t[1] .. " is only " .. pts .. " points wide")
+    -- at least the middle of the touch area is on screen (a bit past an edge is harmless)
+    local h = t[4] / 2
+    assert(t[2] - h >= 0 and t[3] - h >= 0 and t[2] + h <= 1280 and t[3] + h <= 720, t[1] .. " off screen")
+  end
+  for i = 1, #targets do
+    for j = i + 1, #targets do
+      local a, b = targets[i], targets[j]
+      local d = math.sqrt((a[2] - b[2]) ^ 2 + (a[3] - b[3]) ^ 2)
+      assert(d >= a[4] + b[4], a[1] .. " and " .. b[1] .. " touch areas overlap")
+    end
+  end
+  -- the thumb-stick area (left half, lower part) stays clear of the buttons
+  for _, b in ipairs(Touch.BUTTONS) do assert(b.x - (b.hit or b.r) > 560, b.id .. " reaches into the stick area") end
+  -- the mini-game X is big enough too
+  assert(2 * Touch.CLOSE.hit * scale >= 40, "X button")
+  -- presses land on the touch area, not just the drawn circle
+  local t = Touch.new()
+  local tab = Touch.BUTTONS[3]
+  eq(t:press(5, tab.x + tab.hit - 1, tab.y), "tab")
+  eq(HUD.hitPause(HUD.PAUSE.x - HUD.PAUSE.hit + 1, HUD.PAUSE.y), true)
+end)
+
 T.finish()

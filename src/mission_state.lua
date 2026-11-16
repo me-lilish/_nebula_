@@ -94,6 +94,18 @@ function Mission.new(opts)
   return self
 end
 
+-- Continue a saved game: jump to the start of `level` with every earlier
+-- level finished (out-of-range values are clamped).
+function Mission:startAt(level)
+  level = math.max(1, math.min(#Mission.LEVELS, math.floor(tonumber(level) or 1)))
+  self.level, self.task, self.done, self.early = level, 1, false, {}
+  self.completed = {}
+  for i = 1, level - 1 do
+    for _, t in ipairs(Mission.LEVELS[i].tasks) do self.completed[t.id] = true end
+  end
+  return self
+end
+
 function Mission:currentLevel() return Mission.LEVELS[self.level] end
 
 -- Current objective { id, station, text, level } or nil when everything is done

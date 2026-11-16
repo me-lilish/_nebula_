@@ -38,8 +38,9 @@ function Menu.new(onStart, onQuit)
   -- language + read-aloud toggles (main menu) and the briefing speaker button.
   -- main.lua sets onLanguage / onTTS / onSpeak and valueOf(id) -> text.
   self.toggles = {
-    { id = "lang", label = "LANGUAGE: %s", x = 296, y = 640, w = 330, h = 44 },
-    { id = "tts", label = "READ ALOUD: %s", x = 654, y = 640, w = 330, h = 44 },
+    -- 56 px tall: about 30 points even on an iPhone SE (was 44 px)
+    { id = "lang", label = "LANGUAGE: %s", x = 296, y = 634, w = 330, h = 56 },
+    { id = "tts", label = "READ ALOUD: %s", x = 654, y = 634, w = 330, h = 56 },
   }
   self.speaker = { x = 1040, y = 120, r = 30 }
   self.stars = Menu.placeStars(42, 64)
@@ -53,7 +54,7 @@ end
 -- rectangles (x0, y0, x1, y1) and circles (cx, cy, r) kept free of stars
 Menu.STAR_KEEP_OUT = {
   rects = {
-    { 290, 30, 990, 312 },   -- SPACE MISSION title + subtitle
+    { 290, 30, 990, 362 },   -- SPACE MISSION title, subtitle, saved-game line
     { 400, 400, 880, 632 },  -- Start / Abort buttons
     { 270, 626, 1010, 720 }, -- language + read-aloud buttons and the footer
   },
@@ -250,6 +251,13 @@ function Menu:draw()
       lg.draw(self.title, W / 2 - 320, 50, 0, s, s)
     end
     Theme.outlinedText("JUNIOR ASTRONAUT TRAINER", 0, 268, W, "center", C.cyan, C.ink, Theme.font(24))
+    -- saved progress: START continues from this level
+    local saved = self.savedLevel and self.savedLevel()
+    if saved then
+      local lv = require("src.mission_state").LEVELS[saved]
+      Theme.outlinedText(string.format("SAVED GAME: CONTINUE AT LEVEL %d - %s", saved, lv and lv.name or ""),
+        0, 326, W, "center", C.caution, C.ink, Theme.font(19))
+    end
     for _, b in ipairs(self.buttons) do
       local img = (self.hover == b.id) and b.h or b.n
       if img then
@@ -275,7 +283,7 @@ function Menu:draw()
       Theme.set(off and C.metalDark or C.cyan); lg.setLineWidth(2); lg.polygon("line", pts); lg.setLineWidth(1)
       local v = self.valueOf and self.valueOf(b.id) or ""
       lg.setFont(Theme.font(17)); Theme.set(off and C.metalShade or C.white)
-      lg.printf(string.format(b.label, v), b.x, b.y + 11, b.w, "center")
+      lg.printf(string.format(b.label, v), b.x, b.y + b.h / 2 - 11, b.w, "center")
     end
     lg.setFont(Theme.font(13)); Theme.set(C.cyanLight, 0.6)
     lg.printf("NASA Space Apps Challenge 2026", 0, H - 22, W, "center")

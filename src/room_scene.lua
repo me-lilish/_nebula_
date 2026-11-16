@@ -37,7 +37,7 @@ Room.INTERACT_RANGE = 60
 Room.TIRED_SPEED = 0.6
 Room.CORNER_SLIDE = 12                    -- px Vulcan may slip round a door corner                    -- exhaustion slows Vulcan down
 Room.MESSAGE_SECONDS = 3.5
-Room.SPEAKER = { x = 852, y = 33, r = 22 } -- read-aloud button beside the task banner
+Room.SPEAKER = { x = 852, y = 33, r = 24, hit = 36 } -- read-aloud button beside the task banner (hit = touch area)
 Room.NEWS_SECONDS = 7
 
 Room.TEXT = {
@@ -420,16 +420,25 @@ function Room.new(opts)
   return self
 end
 
-function Room:reset()
+-- startLevel (campaign only): continue a saved game from the start of that
+-- level (1 or nil = a brand-new mission).
+function Room:reset(startLevel)
   self.ls:reset()
   -- A small used-water batch so the Water Recycler has something to clean.
   self.ls.wastewater = 20
   self.mission = Mission.new({ unlockAll = not self.campaign })
   if self.campaign then
+    local level = math.max(1, math.min(#Mission.LEVELS, math.floor(tonumber(startLevel) or 1)))
+    self.mission:startAt(level)
     self.ls.autopilot = self.mission:autopilot()
     self.dust:enterCabin() -- clean suit, already inside
     self.vulcan = Vulcan.new(Map.CREW_START_X, Map.CREW_START_Y)
-    self.news = "Good morning, Junior Astronaut! LEVEL 1: look after yourself in the Crew Quarters."
+    if level == 1 then
+      self.news = "Good morning, Junior Astronaut! LEVEL 1: look after yourself in the Crew Quarters."
+    else
+      self:_setupLevel(Mission.LEVELS[level])
+      self.news = string.format("Welcome back! LEVEL %d: %s", level, Mission.LEVELS[level].name)
+    end
   else
     self.ls.autopilot = nil
     self.dust:addSuitDust(self.dust.config.EVA_SUIT_DUST) -- back from an EVA
@@ -467,12 +476,38 @@ function Room:_completeTask(id)
   local ok, unlocked, finished = self.mission:complete(id)
   if not ok then return end
   if unlocked then self:_onUnlock(unlocked) end
-  if finished then self.missionComplete = true end
+  if finished then
+    self.missionComplete = true
+    if self.onProgress then self.onProgress("complete", self:starRating()) end
+  end
+end
+
+-- 1 - 3 stars on MISSION COMPLETE (how much battery is left)
+function Room:starRating()
+  local b = self.ls.battery
+  return (b >= 70 and 3) or (b >= 40 and 2) or 1
+end
+
+-- The level to restart from: the one being played (Level 1 after a win)
+function Room:checkpoint()
+  if not self.campaign or self.missionComplete then return 1 end
+  return self.mission.level
 end
 
 -- A new level opens: hand the system over from Mission Control and set up
 -- a small, safe first job for the child.
 function Room:_onUnlock(level)
+  self:_setupLevel(level)
+  self.unlockCard = { level = level, index = self.mission.level, timer = 6 }
+  TTS.auto(string.format("Level %d unlocked: %s. %s", self.mission.level, level.name, level.lesson), true)
+  self:_sound("sfx_unlock")
+  self.news, self.newsTimer = string.format("LEVEL %d UNLOCKED: %s - %s", self.mission.level, level.name, level.room), Room.NEWS_SECONDS
+  -- auto-save: next time the game continues from this level
+  if self.onProgress then self.onProgress("level", self.mission.level) end
+end
+
+-- The level's machines get their first job (also when a saved game continues)
+function Room:_setupLevel(level)
   local ls = self.ls
   ls.autopilot = self.mission:autopilot()
   local id = level.id
@@ -497,10 +532,6 @@ function Room:_onUnlock(level)
     ls:triggerRadiationWarning()
   end
   ls:_afterAction()
-  self.unlockCard = { level = level, index = self.mission.level, timer = 6 }
-  TTS.auto(string.format("Level %d unlocked: %s. %s", self.mission.level, level.name, level.lesson), true)
-  self:_sound("sfx_unlock")
-  self.news, self.newsTimer = string.format("LEVEL %d UNLOCKED: %s - %s", self.mission.level, level.name, level.room), Room.NEWS_SECONDS
 end
 
 -- level tasks that finish by themselves (all shields placed, storm over)
@@ -861,7 +892,7 @@ function Room:mousepressed(sx, sy, button)
   end
   if button ~= 1 then return nil end
   local sp = Room.SPEAKER
-  if (sx - sp.x) ^ 2 + (sy - sp.y) ^ 2 <= sp.r * sp.r then
+  if (sx - sp.x) ^ 2 + (sy - sp.y) ^ 2 <= sp.hit * sp.hit then
     self:_sound("sfx_click")
     TTS.speak(self:readAloudText())
     return nil
@@ -913,7 +944,8 @@ function Room:keypressed(key)
     self.puzzles:keypressed(key)
     return
   end
-  if key == "r" then self:reset(); self:_sound("sfx_click") end
+  -- R: try the level again (after a win: a new mission from Level 1)
+  if key == "r" then self:reset(self:checkpoint()); self:_sound("sfx_click") end
   if key == "tab" then self.showTablet = not self.showTablet; self:_sound("sfx_click") end
   if key == "e" and not self:isOver() then
     local m = self:_nearestMachine()
@@ -1176,7 +1208,7 @@ function Room:_drawMissionComplete()
   T.outlinedText("MISSION COMPLETE!", 300, 220, 680, "center", C.good, C.ink, T.font(38))
   lg.setFont(T.font(22)); T.set(C.white); lg.printf("You mastered all 8 life-support systems!", 340, 285, 600, "center")
   lg.setFont(T.font(18)); T.set(C.cyanLight); lg.printf("Science tip: water, air, food, power and shielding all work together.", 350, 330, 580, "center")
-  local stars = (self.ls.battery >= 70 and 3) or (self.ls.battery >= 40 and 2) or 1
+  local stars = self:starRating()
   lg.setFont(T.font(36)); T.set(C.caution); lg.printf(string.rep("★ ", stars), 300, 385, 680, "center")
   lg.setFont(T.font(19)); T.set(C.cyanLight); lg.printf("Press R to play again", 300, 470, 680, "center")
 end

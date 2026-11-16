@@ -12,7 +12,7 @@ local C = Theme.C
 local HUD = {}
 
 HUD.PANEL_X, HUD.PANEL_W = 1030, 240
-HUD.PAUSE = { x = 1236, y = 90, r = 28 } -- pause button (mouse + touch)
+HUD.PAUSE = { x = 1236, y = 90, r = 30, hit = 48 } -- pause button (mouse + touch); hit = thumb-sized touch area
 HUD.MINIMAP = { x = 14, y = 720 - 182, size = 168 }
 
 local function f0(x) return math.floor(x + 0.5) end
@@ -191,7 +191,7 @@ end
 
 function HUD.hitPause(x, y)
   local b = HUD.PAUSE
-  return (x - b.x) ^ 2 + (y - b.y) ^ 2 <= (b.r + 6) ^ 2
+  return (x - b.x) ^ 2 + (y - b.y) ^ 2 <= b.hit ^ 2
 end
 
 function HUD.drawPauseButton(hot)

@@ -70,7 +70,9 @@ test("every level, station, tag and puzzle text has an Arabic translation", func
     for _, p in pairs(m.problems) do check(p) end
   end
   for _, cls in pairs(require("src.puzzles.manager").REGISTRY) do check(cls.title); check(cls.hint); check(cls.system) end
-  for _, item in ipairs(PauseMenu.ITEMS) do check(item.label) end
+  for _, item in ipairs(PauseMenu.ITEMS) do check(item.label); if item.confirm then check(item.confirm) end end
+  check(string.format("SAVED GAME: CONTINUE AT LEVEL %d - %s", 5, "WASTE SYSTEM"))
+  check(string.format("Welcome back! LEVEL %d: %s", 3, "WATER SYSTEM"))
   local Map = require("src.station_map")
   for _, room in ipairs(Map.rooms) do check(room.name) end
   I18n.setLanguage("en")
@@ -93,14 +95,54 @@ test("pause menu: keyboard, mouse and touch pick the right action", function()
   local actions = { value = function(id) return id == "language" and "English" or "ON" end }
   for _, item in ipairs(PauseMenu.ITEMS) do actions[item.id] = function() used[#used + 1] = item.id end end
   local p = PauseMenu.new(actions)
+  local function index(id) for i, it in ipairs(PauseMenu.ITEMS) do if it.id == id then return i end end end
   eq(p:keypressed("escape"), "resume")
-  p:keypressed("down"); p:keypressed("down"); eq(p:keypressed("return"), "tts")
-  p:keypressed("up"); p:keypressed("up"); p:keypressed("up"); eq(p.selected, #PauseMenu.ITEMS, "wraps around")
-  local x, y, w, h = p:rect(6)
+  for _ = 1, index("tts") - 1 do p:keypressed("down") end
+  eq(p:keypressed("return"), "tts")
+  p:open()
+  p:keypressed("up"); eq(p.selected, #PauseMenu.ITEMS, "wraps around")
+  local x, y, w, h = p:rect(index("menu"))
   eq(p:mousepressed(x + w / 2, y + h / 2), "menu")
   eq(p:mousepressed(5, 5), nil)
-  eq(p:label(2), "LANGUAGE: English")
+  eq(p:label(index("language")), "LANGUAGE: English")
   eq(table.concat(used, ","), "resume,tts,menu")
+end)
+
+test("pause menu: START OVER needs a second tap; anything else cancels it", function()
+  local used = {}
+  local actions = { value = function() return "" end }
+  for _, item in ipairs(PauseMenu.ITEMS) do actions[item.id] = function() used[#used + 1] = item.id end end
+  local p = PauseMenu.new(actions)
+  local i
+  for k, it in ipairs(PauseMenu.ITEMS) do if it.id == "startover" then i = k end end
+  local x, y, w, h = p:rect(i)
+  eq(p:mousepressed(x + 5, y + 5), "confirm")
+  eq(p:label(i), "TAP AGAIN TO START OVER")
+  eq(#used, 0, "nothing happened yet")
+  eq(p:mousepressed(x + 5, y + 5), "startover")
+  eq(table.concat(used, ","), "startover")
+  -- asked, then tapped somewhere else: cancelled
+  p:mousepressed(x + 5, y + 5); p:mousepressed(1, 1)
+  eq(p:label(i), "START OVER")
+  -- asked, then the menu closed and opened again: cancelled
+  p:mousepressed(x + 5, y + 5); p:open()
+  eq(p:mousepressed(x + 5, y + 5), "confirm")
+  eq(#used, 1)
+end)
+
+test("pause menu buttons are thumb-sized and do not overlap", function()
+  local p = PauseMenu.new({})
+  -- iPhone SE landscape in Safari (568 x 320 points) shows the game at 0.44
+  local scale = math.min(568 / 1280, 320 / 720)
+  for i = 1, #PauseMenu.ITEMS do
+    local x, y, w, h = p:rect(i)
+    assert(h * scale >= 42, "button " .. i .. " is only " .. h * scale .. " points tall")
+    assert(x >= 0 and y >= 0 and x + w <= 1280 and y + h <= 720, "button " .. i .. " is off screen")
+    for j = i + 1, #PauseMenu.ITEMS do
+      local x2, y2, w2, h2 = p:rect(j)
+      assert(x + w <= x2 or x2 + w2 <= x or y + h <= y2 or y2 + h2 <= y, "buttons " .. i .. " and " .. j .. " overlap")
+    end
+  end
 end)
 
 test("the speaker button in the room reads the task", function()
