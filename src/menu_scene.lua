@@ -216,15 +216,24 @@ function Menu:draw()
         local bob = (self.hover == b.id) and -3 or 0
         lg.setColor(1, 1, 1)
         lg.draw(img, x, y + bob, 0, w / img:getWidth(), w / img:getWidth())
+        -- other languages: cover the English painted on the button art and
+        -- write the translated label in the same cyan, outlined style
+        local I18n = require("src.i18n")
+        if I18n.lang ~= "en" then
+          local label = b.id == "start" and "START MISSION" or "ABORT MISSION"
+          Theme.set(Theme.hex(self.hover == b.id and "#263C5A" or "#2F526E")); lg.rectangle("fill", x + w * 0.085, y + bob + h * 0.18, w * 0.83, h * 0.64, 8, 8)
+          Theme.outlinedText(label, x, y + bob + h * 0.5 - 20, w, "center", C.cyan, C.ink, Theme.font(34))
+        end
       end
     end
     for _, b in ipairs(self.toggles or {}) do
-      local hot = self.hoverToggle == b.id
+      local off = self.isDisabled and self.isDisabled(b.id)
+      local hot = self.hoverToggle == b.id and not off
       local pts = Theme.cutPoints(b.x, b.y, b.w, b.h, 10)
-      Theme.set(hot and C.cyanMid or C.space, 0.92); lg.polygon("fill", pts)
-      Theme.set(C.cyan); lg.setLineWidth(2); lg.polygon("line", pts); lg.setLineWidth(1)
+      Theme.set(hot and C.cyanMid or C.space, off and 0.6 or 0.92); lg.polygon("fill", pts)
+      Theme.set(off and C.metalDark or C.cyan); lg.setLineWidth(2); lg.polygon("line", pts); lg.setLineWidth(1)
       local v = self.valueOf and self.valueOf(b.id) or ""
-      lg.setFont(Theme.font(17)); Theme.set(C.white)
+      lg.setFont(Theme.font(17)); Theme.set(off and C.metalShade or C.white)
       lg.printf(string.format(b.label, v), b.x, b.y + 11, b.w, "center")
     end
     lg.setFont(Theme.font(13)); Theme.set(C.cyanLight, 0.6)
@@ -244,8 +253,9 @@ function Menu:_drawBriefing()
   lg.printf(Menu.INTRO, x + 60, y + 78, w - 120, "center")
   -- speaker: read the briefing aloud (English)
   local sp = self.speaker
-  Theme.circle(sp.x, sp.y, sp.r, C.cyanMid, 3)
-  Icons.draw("speaker", sp.x, sp.y, 32, C.white)
+  local mute = self.isDisabled and self.isDisabled("tts")
+  Theme.circle(sp.x, sp.y, sp.r, mute and C.metalDark or C.cyanMid, 3)
+  Icons.draw("speaker", sp.x, sp.y, 32, mute and C.metalShade or C.white)
   for i, s in ipairs(Menu.STEPS) do
     local col = (i - 1) % 2
     local row = math.floor((i - 1) / 2)

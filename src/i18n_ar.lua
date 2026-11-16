@@ -6,6 +6,8 @@ return {
   ["JUNIOR ASTRONAUT TRAINER"] = "تدريب رائد الفضاء الصغير",
   ["NASA Space Apps Challenge 2026"] = "تحدي ناسا لتطبيقات الفضاء 2026",
   ["MISSION BRIEFING"] = "تعليمات المهمة",
+  ["START MISSION"] = "ابدأ المهمة",
+  ["ABORT MISSION"] = "إنهاء المهمة",
   ["CLICK TO BEGIN"] = "اضغط للبدء",
   ["Welcome to the Moon base, Vulcan! You just came back from a moonwalk. "] = "مرحبا بك في قاعدة القمر يا فولكان!",
   ["Welcome to the Moon base, Vulcan! You just came back from a moonwalk. Keep the habitat alive: every machine is connected, just like on a real space station."] =
@@ -32,6 +34,7 @@ return {
   ["READ ALOUD"] = "القراءة بصوت",
   ["ON"] = "تشغيل",
   ["OFF"] = "إيقاف",
+  ["English only"] = "بالإنجليزية فقط",
 
   ------------------------------------------------------------------ pause menu
   ["PAUSED"] = "استراحة",

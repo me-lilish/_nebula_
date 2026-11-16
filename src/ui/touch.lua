@@ -6,7 +6,7 @@
     USE        : like E - use the nearest machine
     RUN        : hold to sprint (like Shift)
     TABLET     : the mission tablet (like Tab)
-    MENU       : back to the main menu (like Esc)
+    (pause     : the round pause button at the top right, src/ui/hud.lua)
     X          : leave a mini-game (like Esc)
   Taps anywhere else work like mouse clicks (stations, puzzles, menus).
 
@@ -22,7 +22,6 @@ Touch.BUTTONS = {
   { id = "use", label = "USE", x = 1176, y = 586, r = 64 },
   { id = "run", label = "RUN", x = 1046, y = 640, r = 46 },
   { id = "tab", label = "TABLET", x = 1052, y = 520, r = 38 },
-  { id = "menu", label = "MENU", x = 1196, y = 456, r = 32 },
 }
 Touch.CLOSE = { x = 1138, y = 92, r = 34 } -- leave a mini-game
 

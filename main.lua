@@ -16,6 +16,7 @@ local I18n = require("src.i18n")
 local TTS = require("src.tts")
 local Settings = require("src.settings")
 local PauseMenu = require("src.pause_menu")
+local HUD = require("src.ui.hud")
 
 local VW, VH = 1280, 720
 local canvas
@@ -49,6 +50,9 @@ end
 ------------------------------------------------------------------------------
 local function setLanguage(lang)
   I18n.setLanguage(lang)
+  -- the voice speaks English only: read aloud is greyed out in Arabic
+  TTS.blocked = lang ~= "en"
+  if TTS.blocked then TTS.speak("") end
   Settings.lang = lang
   Settings.save()
   -- room signs are painted once into the station canvas: repaint them
@@ -60,6 +64,7 @@ local function nextLanguage()
 end
 
 local function toggleReadAloud()
+  if TTS.blocked then audio:play("sfx_error") return end
   TTS.setEnabled(not TTS.enabled)
   Settings.tts = TTS.enabled
   Settings.save()
@@ -73,7 +78,10 @@ end
 
 local function settingValue(id)
   if id == "lang" or id == "language" then return I18n.NAMES[I18n.lang] end
-  if id == "tts" then return TTS.enabled and "ON" or "OFF" end
+  if id == "tts" then
+    if TTS.blocked then return "English only" end
+    return TTS.enabled and "ON" or "OFF"
+  end
   if id == "sound" then return audio.muted and "OFF" or "ON" end
   return ""
 end
@@ -121,6 +129,7 @@ function love.load(args)
   menu.onLanguage, menu.onTTS = nextLanguage, toggleReadAloud
   menu.onSpeak = function(text) TTS.speak(text) end
   menu.valueOf = settingValue
+  menu.isDisabled = function(id) return id == "tts" and TTS.blocked end
   pause = PauseMenu.new({
     resume = function() paused = false end,
     language = nextLanguage,
@@ -129,6 +138,7 @@ function love.load(args)
     restart = function() room:reset(); paused = false end,
     menu = function() paused = false; menu.state = "menu"; mode = "menu" end,
     value = settingValue,
+    disabled = function(id) return id == "tts" and TTS.blocked end,
   })
 end
 
@@ -159,7 +169,11 @@ function love.draw()
   if mode == "menu" then menu:draw()
   else
     room:draw()
-    if paused then pause:draw(love.timer.getTime()) else touch:draw(room.puzzles:isOpen()) end
+    if paused then pause:draw(love.timer.getTime())
+    else
+      touch:draw(room.puzzles:isOpen())
+      if not room.puzzles:isOpen() then HUD.drawPauseButton(HUD.hitPause(toVirtual(love.mouse.getPosition()))) end
+    end
   end
   love.graphics.setCanvas()
   love.graphics.clear(0.03, 0.03, 0.08)
@@ -202,6 +216,7 @@ function love.mousepressed(x, y, button, istouch)
   local vx, vy = toVirtual(x, y)
   if mode == "menu" then menu:mousepressed(vx, vy, button)
   elseif paused then if pause:mousepressed(vx, vy) then audio:play("sfx_click") end
+  elseif button == 1 and not room.puzzles:isOpen() and HUD.hitPause(vx, vy) then openPause()
   else room:mousepressed(vx, vy, button) end
 end
 
@@ -217,6 +232,7 @@ function love.touchpressed(id, x, y)
   local vx, vy = toVirtual(x, y)
   if mode == "menu" then menu:mousepressed(vx, vy, 1) return end
   if paused then if pause:mousepressed(vx, vy) then audio:play("sfx_click") end return end
+  if not room.puzzles:isOpen() and HUD.hitPause(vx, vy) then openPause() return end
   if room.puzzles:isOpen() then
     if Touch.hit(Touch.CLOSE, vx, vy) then room:keypressed("escape") return end
     puzzleTouch = id
@@ -227,7 +243,6 @@ function love.touchpressed(id, x, y)
   local action = touch:press(id, vx, vy)
   if action == "use" then room:keypressed("e")
   elseif action == "tab" then room:keypressed("tab")
-  elseif action == "menu" then openPause()
   elseif action == nil then room:mousepressed(vx, vy, 1) end
 end
 

@@ -12,6 +12,7 @@ local C = Theme.C
 local HUD = {}
 
 HUD.PANEL_X, HUD.PANEL_W = 1030, 240
+HUD.PAUSE = { x = 1236, y = 90, r = 28 } -- pause button (mouse + touch)
 HUD.MINIMAP = { x = 14, y = 720 - 182, size = 168 }
 
 local function f0(x) return math.floor(x + 0.5) end
@@ -188,13 +189,29 @@ function HUD.drawBanner(ls, guide, t)
   lg.print(guide.text, x + 60, 29 + (19 - size) * 0.5)
 end
 
+function HUD.hitPause(x, y)
+  local b = HUD.PAUSE
+  return (x - b.x) ^ 2 + (y - b.y) ^ 2 <= (b.r + 6) ^ 2
+end
+
+function HUD.drawPauseButton(hot)
+  local lg = love.graphics
+  local b = HUD.PAUSE
+  Theme.set(C.ink); lg.circle("fill", b.x, b.y, b.r + 3)
+  Theme.set(hot and C.cyanMid or C.space); lg.circle("fill", b.x, b.y, b.r)
+  Theme.set(C.cyan); lg.setLineWidth(3); lg.circle("line", b.x, b.y, b.r); lg.setLineWidth(1)
+  Theme.set(C.white)
+  lg.rectangle("fill", b.x - 10, b.y - 11, 7, 22, 2, 2)
+  lg.rectangle("fill", b.x + 3, b.y - 11, 7, 22, 2, 2)
+end
+
 -- read-aloud button (English text-to-speech)
-function HUD.drawSpeaker(b, autoOn, t)
+function HUD.drawSpeaker(b, autoOn, t, disabled)
   local lg = love.graphics
   Theme.set(C.ink); lg.circle("fill", b.x, b.y, b.r + 3)
-  Theme.set(autoOn and C.cyan or C.space); lg.circle("fill", b.x, b.y, b.r)
-  Theme.set(C.cyan); lg.setLineWidth(2); lg.circle("line", b.x, b.y, b.r); lg.setLineWidth(1)
-  Icons.draw("speaker", b.x, b.y, b.r * 1.3, autoOn and C.ink or C.white)
+  Theme.set(autoOn and not disabled and C.cyan or C.space, disabled and 0.6 or 1); lg.circle("fill", b.x, b.y, b.r)
+  Theme.set(disabled and C.metalDark or C.cyan); lg.setLineWidth(2); lg.circle("line", b.x, b.y, b.r); lg.setLineWidth(1)
+  Icons.draw("speaker", b.x, b.y, b.r * 1.3, disabled and C.metalShade or (autoOn and C.ink or C.white))
 end
 
 function HUD.drawMinimap(machines, vulcan, cam, view, ls, guide, t)

@@ -45,8 +45,14 @@ function PauseMenu:label(i)
   return item.label
 end
 
+function PauseMenu:isDisabled(i)
+  local item = PauseMenu.ITEMS[i]
+  return item and self.actions.disabled and self.actions.disabled(item.id) or false
+end
+
 function PauseMenu:activate(i)
   local item = PauseMenu.ITEMS[i]
+  if self:isDisabled(i) then return nil end
   if item and self.actions[item.id] then self.actions[item.id]() end
   return item and item.id
 end
@@ -63,8 +69,10 @@ function PauseMenu:mousepressed(x, y)
 end
 
 function PauseMenu:keypressed(key)
-  if key == "up" or key == "w" then self.selected = (self.selected - 2) % #PauseMenu.ITEMS + 1
-  elseif key == "down" or key == "s" then self.selected = self.selected % #PauseMenu.ITEMS + 1
+  if key == "up" or key == "w" then
+    repeat self.selected = (self.selected - 2) % #PauseMenu.ITEMS + 1 until not self:isDisabled(self.selected)
+  elseif key == "down" or key == "s" then
+    repeat self.selected = self.selected % #PauseMenu.ITEMS + 1 until not self:isDisabled(self.selected)
   elseif key == "return" or key == "space" then return self:activate(self.selected)
   elseif key == "escape" or key == "p" then return self:activate(1) end
   return nil
@@ -81,11 +89,12 @@ function PauseMenu:draw(t)
   T.outlinedText("PAUSED", PauseMenu.X - 50, y0 - 90, PauseMenu.W + 100, "center", C.white, C.ink, T.font(36))
   for i = 1, #PauseMenu.ITEMS do
     local x, y, w, h = self:rect(i)
-    local sel = i == self.selected
+    local off = self:isDisabled(i)
+    local sel = i == self.selected and not off
     local pts = T.cutPoints(x, y, w, h, 12)
-    T.set(sel and C.cyan or T.hex("#1E2A4F"), sel and 1 or 0.95); lg.polygon("fill", pts)
-    T.set(sel and C.white or C.cyanMid); lg.setLineWidth(3); lg.polygon("line", pts); lg.setLineWidth(1)
-    lg.setFont(T.font(20)); T.set(sel and C.ink or C.white)
+    T.set(sel and C.cyan or T.hex(off and "#191C30" or "#1E2A4F"), sel and 1 or 0.95); lg.polygon("fill", pts)
+    T.set(sel and C.white or (off and C.metalDark or C.cyanMid)); lg.setLineWidth(3); lg.polygon("line", pts); lg.setLineWidth(1)
+    lg.setFont(T.font(20)); T.set(sel and C.ink or (off and C.metalShade or C.white))
     lg.printf(self:label(i), x, y + h / 2 - 12, w, "center")
   end
   lg.setFont(T.font(14)); T.set(C.metalShade)

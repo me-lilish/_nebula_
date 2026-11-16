@@ -13,6 +13,7 @@
 ]]
 local TTS = {}
 TTS.enabled = false   -- automatic read-aloud
+TTS.blocked = false   -- true while the game is in another language (voice is English only)
 TTS.last = nil
 
 -- what the voice should actually say
@@ -53,6 +54,7 @@ local function shellQuote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
 -- Speak now (queue = true: after the current sentence instead of cutting
 -- it off). Returns the backend used.
 function TTS.speak(text, queue)
+  if TTS.blocked then return nil end
   text = TTS.clean(text)
   if text == "" then return nil end
   TTS.lastSpoken = text
@@ -73,7 +75,7 @@ function TTS.speak(text, queue)
 end
 
 function TTS.auto(text, queue)
-  if not TTS.enabled or not text or text == TTS.last then return end
+  if TTS.blocked or not TTS.enabled or not text or text == TTS.last then return end
   TTS.last = text
   TTS.speak(text, queue)
 end

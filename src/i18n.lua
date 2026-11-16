@@ -127,8 +127,8 @@ function I18n.shapeLogical(cps)
         if joinBefore and joinAfter then form = f[4]
         elseif joinBefore then form = f[2]
         elseif joinAfter then form = f[3]
-        else form = f[1] end
-        out[#out + 1] = form or f[1]
+        else form = cp end -- isolated: the plain letter (every Arabic font has it)
+        out[#out + 1] = form or cp
         i = i + 1
       end
     else
@@ -301,6 +301,30 @@ function I18n.wrap(font, text, limit)
   return lines
 end
 
+-- Picks the Arabic font for `text` drawn where English `english` would be:
+-- same line height and baseline as the English font, shrunk (down to 72%)
+-- when the Arabic would take more room than the English did.
+local function fitFont(Theme, enFont, english, arabic, limit)
+  local scale = 1
+  local f = Theme.arabicFontFor(enFont, 1)
+  if not f then return nil end
+  if limit then
+    local _, enLines = enFont:getWrap(english, limit)
+    local want = math.max(1, #enLines)
+    while scale > 0.72 and #I18n.wrap(f, arabic, limit) > want do
+      scale = scale - 0.07
+      f = Theme.arabicFontFor(enFont, scale)
+    end
+  else
+    local room = enFont:getWidth(english) * 1.12 + 8
+    while scale > 0.72 and f:getWidth(I18n.shape(arabic)) > room do
+      scale = scale - 0.07
+      f = Theme.arabicFontFor(enFont, scale)
+    end
+  end
+  return f
+end
+
 function I18n.install()
   if I18n.installed then return end
   I18n.installed = true
@@ -309,12 +333,16 @@ function I18n.install()
   local Theme = require("src.ui.theme")
   I18n.rawPrint, I18n.rawPrintf = rawPrint, rawPrintf
 
-  local function withArabicFont(fn)
+  -- draws with the fitted Arabic font, on the English baseline
+  local function withArabicFont(english, arabic, limit, fn)
     local cur = lg.getFont()
-    local f = Theme.arabicFontFor(cur)
-    if f then lg.setFont(f) end
-    fn()
-    if f then lg.setFont(cur) end
+    local f = fitFont(Theme, cur, english, arabic, limit)
+    if not f then return fn(cur, 0) end
+    -- sit on the same baseline as the English text would
+    local dy = cur:getBaseline() - f:getBaseline()
+    lg.setFont(f)
+    fn(f, dy)
+    lg.setFont(cur)
   end
 
   lg.print = function(text, x, y, ...)
@@ -322,7 +350,7 @@ function I18n.install()
     local tr = I18n.t(text)
     if not I18n.hasArabic(tr) then return rawPrint(tr, x, y, ...) end
     local args = { ... }
-    withArabicFont(function() rawPrint(I18n.shape(tr), x, y, unpack(args)) end)
+    withArabicFont(text, tr, nil, function(_, dy) rawPrint(I18n.shape(tr), x, y + dy, unpack(args)) end)
   end
 
   lg.printf = function(text, x, y, limit, align, ...)
@@ -330,13 +358,12 @@ function I18n.install()
     local tr = I18n.t(text)
     if not I18n.hasArabic(tr) then return rawPrintf(tr, x, y, limit, align, ...) end
     local args = { ... }
-    withArabicFont(function()
-      local font = lg.getFont()
-      local lh = font:getHeight() * font:getLineHeight()
-      -- right-to-left text: "left" alignment reads from the right edge
-      local al = align == "left" and "right" or align
+    local enFont = lg.getFont()
+    local enLH = enFont:getHeight() * enFont:getLineHeight()
+    withArabicFont(text, tr, limit, function(font, dy)
+      -- same alignment and line spacing as the English text
       for i, line in ipairs(I18n.wrap(font, tr, limit)) do
-        rawPrintf(I18n.shape(line), x, y + (i - 1) * lh, limit, al, unpack(args))
+        rawPrintf(I18n.shape(line), x, y + dy + (i - 1) * enLH, limit, align, unpack(args))
       end
     end)
   end
@@ -347,7 +374,7 @@ function I18n.width(font, s)
   local tr = I18n.t(s)
   if I18n.hasArabic(tr) then
     local Theme = require("src.ui.theme")
-    local f = Theme.arabicFontFor(font) or font
+    local f = fitFont(Theme, font, s, tr, nil) or font
     return f:getWidth(I18n.shape(tr))
   end
   return font:getWidth(tr)

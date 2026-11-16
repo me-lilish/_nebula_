@@ -1160,7 +1160,7 @@ function Room:draw()
   self.HUD.drawClock(ls, self.outside)
   if self.campaign then self.HUD.drawLevel(self.mission, t) end
   self.HUD.drawBanner(ls, self.guide, t)
-  self.HUD.drawSpeaker(Room.SPEAKER, TTS.enabled, t)
+  self.HUD.drawSpeaker(Room.SPEAKER, TTS.enabled, t, TTS.blocked)
   if self.showTablet then self.HUD.drawCards(ls, t) end
   self.HUD.drawNews(self.news and self:_t(self.news))
   if self.unlockCard then self.HUD.drawUnlock(self.unlockCard, t) end

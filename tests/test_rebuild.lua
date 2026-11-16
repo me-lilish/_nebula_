@@ -28,9 +28,9 @@ test("the mission is 8 levels, easiest to hardest, one task at a time", function
   eq(table.concat(ids, ","), "human,dust,water,food,waste,air,power,radiation")
   local m = Mission.new()
   eq(m:objective().station, "foodstation")
-  eq(m:complete("toilet"), false, "only the current task counts")
-  m:complete("foodstation"); eq(m:objective().station, "toilet")
-  m:complete("toilet"); eq(m:objective().station, "sleep")
+  eq(m:complete("toilet"), false, "it is not the toilet's turn yet")
+  m:complete("foodstation")
+  eq(m:objective().station, "sleep", "the early bathroom visit already counted")
   local ok, unlocked = m:complete("sleep")
   eq(ok, true); eq(unlocked.id, "dust"); eq(m:objective().station, "outside")
 end)
@@ -44,6 +44,24 @@ test("locked levels stay with Mission Control until they open", function()
   for _, id in ipairs({ "foodstation", "toilet", "sleep" }) do m:complete(id) end
   eq(m:isRoomUnlocked("airlock"), true); eq(m:exteriorUnlocked(), true); eq(m:autopilot().dust, nil)
   eq(Mission.new({ unlockAll = true }):objective(), nil)
+end)
+
+test("a machine task done early still counts (no stuck step)", function()
+  local m = Mission.new()
+  for _, id in ipairs({ "foodstation", "toilet", "sleep" }) do m:complete(id) end
+  eq(m:objective().id, "outside")
+  eq(m:complete("trace"), false, "not its turn yet")
+  m:complete("outside"); m:complete("dustoff")
+  local ok, unlocked = m:complete("entrance")
+  eq(ok, true); eq(unlocked and unlocked.id, "water", "the early HEPA swap counted, level 3 opens")
+end)
+
+test("walking tasks still have to happen in their order", function()
+  local m = Mission.new()
+  for _, id in ipairs({ "foodstation", "toilet", "sleep" }) do m:complete(id) end
+  m:complete("entrance") -- walked through the inner door before going outside
+  m:complete("outside"); m:complete("dustoff")
+  eq(m:objective().id, "entrance", "must still walk in after brushing the suit")
 end)
 
 T.finish()

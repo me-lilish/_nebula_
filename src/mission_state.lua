@@ -104,23 +104,57 @@ function Mission:objective()
   return t and { id = t.id, station = t.station, text = t.text, level = self.level }
 end
 
--- Completes the current task if `id` matches.
--- Returns completed (bool), unlockedLevel (table or nil), finishedGame (bool)
-function Mission:complete(id)
-  local o = self:objective()
-  if not o or o.id ~= id then return false end
-  self.completed[id] = true
+-- Tasks that only count at their turn (places to walk to, the storm). Machine
+-- tasks done EARLY - before the mission asks for them - still count: without
+-- this a quick player who, say, swapped the HEPA filter before walking in got
+-- "already clean" later and was stuck on that step forever.
+local IN_ORDER_ONLY = { outside = true, entrance = true, shield = true, survive = true }
+
+function Mission:_laterTaskInLevel(id)
+  local lv = self:currentLevel()
+  for i = self.task + 1, #lv.tasks do
+    if lv.tasks[i].id == id then return true end
+  end
+  return false
+end
+
+-- Moves to the next task; returns unlockedLevel, finishedGame
+function Mission:_advance()
   local lv = self:currentLevel()
   if self.task < #lv.tasks then
     self.task = self.task + 1
-    return true
+    return nil, false
   end
   if self.level < #Mission.LEVELS then
     self.level, self.task = self.level + 1, 1
-    return true, Mission.LEVELS[self.level]
+    self.early = {}
+    return Mission.LEVELS[self.level], false
   end
   self.done = true
-  return true, nil, true
+  return nil, true
+end
+
+-- Completes the current task if `id` matches (and any tasks right after it
+-- that were already done early).
+-- Returns completed (bool), unlockedLevel (table or nil), finishedGame (bool)
+function Mission:complete(id)
+  local o = self:objective()
+  if not o then return false end
+  self.early = self.early or {}
+  if o.id ~= id then
+    if not IN_ORDER_ONLY[id] and self:_laterTaskInLevel(id) then self.early[id] = true end
+    return false
+  end
+  self.completed[id] = true
+  local unlocked, finished = self:_advance()
+  -- skip the following tasks of this level that were already done early
+  while not unlocked and not finished do
+    local nxt = self:objective()
+    if not (nxt and self.early[nxt.id]) then break end
+    self.completed[nxt.id] = true
+    unlocked, finished = self:_advance()
+  end
+  return true, unlocked, finished
 end
 
 function Mission:isComplete() return self.done end

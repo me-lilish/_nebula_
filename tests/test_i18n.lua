@@ -15,7 +15,8 @@ test("Arabic letters join: initial, medial, final and isolated forms", function(
   eq(shaped[1], 0xFE91); eq(shaped[2], 0xFEF4); eq(shaped[3], 0xFE96)
   -- "دار": dal never joins forward, alef after it stands alone
   shaped = I18n.shapeLogical(cps("دار"))
-  eq(shaped[1], 0xFEA9); eq(shaped[2], 0xFE8D); eq(shaped[3], 0xFEAD)
+  -- (letters that stand alone use the plain letter, which fonts draw isolated)
+  eq(shaped[1], 0x062F); eq(shaped[2], 0x0627); eq(shaped[3], 0x0631)
   -- lam + alef becomes one ligature
   shaped = I18n.shapeLogical(cps("لا"))
   eq(#shaped, 1); eq(shaped[1], 0xFEFB)

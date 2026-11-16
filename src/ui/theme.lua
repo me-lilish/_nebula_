@@ -77,15 +77,19 @@ function Theme.font(size)
   return f
 end
 
--- Arabic text uses DejaVu Sans (assets/fonts, free licence, has every
--- joined Arabic letter form), at the size of the English font it replaces.
+-- Arabic text uses Tajawal Bold (assets/fonts, SIL Open Font License): a
+-- geometric sans close to the English Bahnschrift. Each Arabic font is sized
+-- so its line height matches the English font it replaces, and it can be
+-- asked for a smaller size (scale) when a phrase must fit the English space.
 local arabicCache, arabicData = {}, nil
 local function loadArabicData()
   if arabicData ~= nil then return arabicData end
   arabicData = false
-  local path = "assets/fonts/DejaVuSans-Bold.ttf"
-  local ok, d = pcall(love.filesystem.newFileData, path)
-  if ok and d then arabicData = d; return d end
+  local path = "assets/fonts/Tajawal-Bold.ttf"
+  if love.filesystem.getInfo(path) then
+    local ok, d = pcall(love.filesystem.newFileData, path)
+    if ok and d then arabicData = d; return d end
+  end
   local f = io.open(path, "rb")
   if f then
     local bytes = f:read("*a"); f:close()
@@ -95,16 +99,28 @@ local function loadArabicData()
   return arabicData
 end
 
-function Theme.arabicFontFor(font)
-  local size = (font and fontSize[font]) or 14
-  if arabicCache[size] == nil then
-    local data = loadArabicData()
-    local ok, f = false, nil
-    if data then ok, f = pcall(love.graphics.newFont, data, math.max(8, math.floor(size * 0.86 + 0.5))) end
-    arabicCache[size] = (ok and f) or false
-  end
-  return arabicCache[size] or nil
+local function newArabic(size)
+  local data = loadArabicData()
+  if not data then return nil end
+  local ok, f = pcall(love.graphics.newFont, data, math.max(7, size))
+  return ok and f or nil
 end
+
+-- font: the English font being replaced; scale (optional, <= 1) shrinks it
+function Theme.arabicFontFor(font, scale)
+  local size = (font and fontSize[font]) or 14
+  local key = size .. ":" .. (scale or 1)
+  if arabicCache[key] == nil then
+    -- first match the English line height, then apply the scale
+    local probe = newArabic(size)
+    local target = font and font:getHeight() or size
+    local px = size
+    if probe then px = math.floor(size * target / math.max(1, probe:getHeight()) * 1.04 + 0.5) end
+    arabicCache[key] = newArabic(math.max(7, math.floor(px * (scale or 1) + 0.5))) or false
+  end
+  return arabicCache[key] or nil
+end
+
 
 ------------------------------------------------------------------------------
 -- Colour helpers
